@@ -38,10 +38,20 @@ class SubConsciousClient:
             await self._session.close()
             self._session = None
 
-    async def inject_prompt(self, session_id: str, text: str) -> DeliveryResult:
+    async def inject_prompt(
+        self,
+        session_id: str,
+        text: str,
+        *,
+        delivery: str = "queue",
+    ) -> DeliveryResult:
         """Inject a message into a single session."""
         url = f"{self._adapter_url}/inject"
-        payload = {"session_id": session_id, "text": text}
+        payload = {
+            "session_id": session_id,
+            "text": text,
+            "delivery": delivery,
+        }
         try:
             http = await self._get_session()
             async with http.post(url, json=payload) as resp:

@@ -1188,6 +1188,27 @@ sudo systemctl restart subconscious-engine.service
 # or restart the single background process Hermes uses
 ```
 
+### 14.8 Queue delivery (do not interrupt mid-task)
+
+SubConscious Engine injects with `"delivery": "queue"` by default. When Hermes is already working, nudges wait for the **next turn** instead of interrupting (same FIFO as `/queue`).
+
+**Requires** an updated [SubConscious-Adapter](https://github.com/KarlitaHermes/SubConscious-Adapter) plugin that honors the `delivery` field. After pulling both repos:
+
+```bash
+# Adapter plugin (symlink or copy to plugins dir, then restart gateway)
+cd /path/to/subconscious-adapter
+git pull
+# e.g. ln -sfn $(pwd) ~/.hermes/plugins/subconscious-adapter
+sudo systemctl restart hermes-gateway
+
+# Engine
+cd /path/to/subconscious-engine
+git pull
+sudo systemctl restart subconscious-engine.service
+```
+
+No Hermes gateway core changes are required — the adapter uses the gateway's existing `_enqueue_fifo` when the session is busy.
+
 ---
 
 ## 11. Quick reference — minimal path from zero to running

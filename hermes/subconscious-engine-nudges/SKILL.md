@@ -61,6 +61,7 @@ Entry points (idle | directory | http | http_poll)
 ```
 
 - **Injection** uses adapter `http://127.0.0.1:8769/inject` — you do not call this; the engine does.
+- **Queue delivery:** the engine sends `"delivery": "queue"` on every inject. If you are already mid-task, the nudge waits for the **next turn** (like `/queue`) instead of interrupting. Requires an updated SubConscious-Adapter plugin.
 - **Acknowledgement** uses engine `http://127.0.0.1:8770/ack` — **you** call this via `ack-engine.sh` or `curl`.
 
 Nudge types are **independent**. Each has its own `cooldown_key`. Working on `idle_engine` does not block `weather` or `pending_decisions` — ack each key separately.
