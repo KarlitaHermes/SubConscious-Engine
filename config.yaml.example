@@ -1,0 +1,32 @@
+# SubConscious Engine Configuration
+# Copy this to ~/.hermes/subconscious-engine/config.yaml
+
+# Gateway connection
+gateway:
+  url: "http://127.0.0.1:8642"
+  api_key: ""  # Auto-loaded from ~/.hermes/.env if empty
+
+# SubConscious Adapter connection
+adapter:
+  url: "http://127.0.0.1:8769"
+
+# Idle detection
+idle:
+  threshold_minutes: 30
+  cooldown_minutes: 60
+  target_source: "telegram"
+  fallback_sources: ["cli"]
+
+# Polling interval (seconds)
+poll_interval_seconds: 60
+
+# Logging
+logging:
+  level: "INFO"
+  file: "~/.hermes/logs/subconscious-engine.log"
+  max_bytes: 10485760
+  backup_count: 3
+
+# State file
+state:
+  file: "~/.hermes/subconscious-engine/state.yaml"

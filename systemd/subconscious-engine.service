@@ -1,0 +1,28 @@
+[Unit]
+Description=SubConscious Engine - Autonomous session injection daemon
+After=network-online.target hermes-gateway.service
+Wants=network-online.target
+Requires=hermes-gateway.service
+
+[Service]
+Type=simple
+User=hermes
+Group=hermes
+WorkingDirectory=/home/hermes/workspace/subconscious-engine
+ExecStart=/home/hermes/workspace/subconscious-engine/.venv/bin/python -m src
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+# Security
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/hermes/.hermes/subconscious-engine /home/hermes/.hermes/logs
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=subconscious-engine
+
+[Install]
+WantedBy=multi-user.target
