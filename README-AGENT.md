@@ -1241,6 +1241,7 @@ curl -s http://127.0.0.1:8771/health
 
 | File | Purpose |
 |------|---------|
+| `VERSION-NOTES.md` | **Upgrade notes** — queue delivery, install steps, rollback |
 | `hermes/subconscious-engine-nudges/SKILL.md` | **Hermes skill** — handle all nudge types + `/ack` |
 | `hermes/subconscious-engine-nudges/scripts/ack-engine.sh` | Shell helper for `POST /ack` |
 | `hermes/install-skill.sh` | Install skill into `~/.hermes/skills/devops/` |
