@@ -105,3 +105,34 @@ def test_delivery_history_capped_at_100(tmp_path: Path, monkeypatch: pytest.Monk
     raw = yaml.safe_load((tmp_path / "state.yaml").read_text(encoding="utf-8"))
     assert len(raw["deliveries"]) == 100
     assert raw["deliveries"][0]["event_id"] == "e5"
+
+
+def test_poll_item_seen_tracking(tmp_path: Path) -> None:
+    state = StateManager(tmp_path / "state.yaml")
+    assert state.is_poll_item_seen("feed", "item-1") is False
+    state.mark_poll_item_seen("feed", "item-1")
+    assert state.is_poll_item_seen("feed", "item-1") is True
+    reloaded = StateManager(tmp_path / "state.yaml")
+    assert reloaded.is_poll_item_seen("feed", "item-1") is True
+
+
+def test_record_ack_sets_cooldown_and_agent_handled(tmp_path: Path) -> None:
+    state = StateManager(tmp_path / "state.yaml")
+    state.set_idle_period_active(True)
+    state.record_ack("idle_engine", 60, status="done", reset_idle_period=True, event_id="evt1")
+    assert state.is_in_cooldown(60, key="idle_engine") is True
+    assert state.last_agent_handled is not None
+    assert state.idle_period_active is False
+    assert state.is_task_in_progress("idle_engine") is False
+
+
+def test_record_ack_in_progress_counts_as_activity(tmp_path: Path) -> None:
+    state = StateManager(tmp_path / "state.yaml")
+    state.record_ack("idle_engine", 60, status="in_progress", event_id="evt1")
+    assert state.is_task_in_progress("idle_engine") is True
+    assert state.last_agent_handled is not None
+    assert state.is_in_cooldown(60, key="idle_engine") is False
+
+    state.record_ack("idle_engine", 60, status="done")
+    assert state.is_task_in_progress("idle_engine") is False
+    assert state.is_in_cooldown(60, key="idle_engine") is True

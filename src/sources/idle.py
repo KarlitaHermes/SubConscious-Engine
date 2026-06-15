@@ -84,18 +84,23 @@ class IdleEventSource:
             self._config.gateway.api_key,
             session.id,
         )
+        effective_activity = self._effective_activity(last_activity)
 
-        await self._maybe_emit_pending_decisions(bus, session, last_activity)
+        await self._maybe_emit_pending_decisions(bus, session, effective_activity)
 
-        currently_idle = self._is_idle(last_activity)
+        currently_idle = self._is_idle(effective_activity)
         if currently_idle:
             self._state.set_idle_period_active(True)
-        self._state.update_observed_activity(last_activity)
+        self._state.update_observed_activity(effective_activity)
 
         if not currently_idle:
             return
 
         if self._state.is_in_cooldown(self._config.idle.cooldown_minutes, key=IDLE_COOLDOWN_KEY):
+            return
+
+        if self._state.is_task_in_progress(IDLE_COOLDOWN_KEY):
+            logger.debug("Idle nudge skipped — task in progress (%s)", IDLE_COOLDOWN_KEY)
             return
 
         event_type = self._state.next_idle_event_type()
@@ -119,7 +124,7 @@ class IdleEventSource:
             preferred_source=session.source,
             cooldown_key=IDLE_COOLDOWN_KEY,
             metadata={
-                "idle_minutes": self._idle_minutes(last_activity),
+                "idle_minutes": self._idle_minutes(effective_activity),
                 "idle_trigger_count": count,
             },
         )
@@ -147,6 +152,9 @@ class IdleEventSource:
         if self._state.is_in_cooldown(self._config.idle.cooldown_minutes, key=DECISIONS_COOLDOWN_KEY):
             return
 
+        if self._state.is_task_in_progress(DECISIONS_COOLDOWN_KEY):
+            return
+
         prompt = build_pending_decisions_prompt(
             self._config.idle.vault_root,
             idle_minutes=self._config.idle.threshold_minutes,
@@ -168,6 +176,15 @@ class IdleEventSource:
         )
         if await bus.publish(event):
             self._state.record_decisions_nudge()
+
+    def _effective_activity(self, last_human: Optional[float]) -> Optional[float]:
+        """Latest of human chat or agent ack — agent handling counts as activity."""
+        agent = self._state.last_agent_handled
+        if last_human is None:
+            return agent
+        if agent is None:
+            return last_human
+        return max(last_human, agent)
 
     def _is_idle(self, last_activity: Optional[float]) -> bool:
         if last_activity is None:

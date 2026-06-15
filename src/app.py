@@ -19,6 +19,7 @@ from src.router.router import Router
 from src.sources.file_watcher import FileEventSource
 from src.sources.idle import IdleEventSource
 from src.sources.inbox_watcher import InboxEventSource
+from src.sources.rest_poller import RestPollEventSource
 from src.sources.rest_server import RestEventSource
 from src.sources.vault_rules import VaultRulesEventSource
 from src.state import StateManager
@@ -113,7 +114,16 @@ class App:
                 self._sources.append(src)
                 self._tasks.append(asyncio.create_task(src.start(self._bus)))
             elif entry_point.type == "http":
-                src = RestEventSource(entry_point)
+                src = RestEventSource(
+                    entry_point,
+                    self._state,
+                    default_cooldown_minutes=self._config.idle.cooldown_minutes,
+                )
+                self._sources.append(src)
+                self._tasks.append(asyncio.create_task(src.start(self._bus)))
+            elif entry_point.type == "http_poll":
+                assert self._http is not None
+                src = RestPollEventSource(entry_point, self._state, self._http)
                 self._sources.append(src)
                 self._tasks.append(asyncio.create_task(src.start(self._bus)))
             elif entry_point.type == "idle":

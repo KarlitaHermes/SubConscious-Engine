@@ -1,0 +1,46 @@
+# Warsaw weather via Open-Meteo — 6-hour outlook, polled every 6 hours
+#
+# Merge into ~/.hermes/subconscious-engine/config.yaml
+#
+# Behaviour:
+#   - Every 6 hours the engine fetches the NEXT 6 hours of hourly forecast
+#   - One inject per poll window (deduped by window start time)
+#   - Message includes storm/rain alerts + ride/outdoors advisory
+#
+# Open-Meteo is free: https://open-meteo.com/
+#
+# Test the URL:
+#   curl -s "https://api.open-meteo.com/v1/forecast?latitude=52.2297&longitude=21.0122&hourly=temperature_2m,precipitation_probability,weather_code,precipitation,wind_speed_10m&forecast_hours=6&timezone=Europe%2FWarsaw"
+#
+# IMPORTANT: forecast_hours in the URL must match handle.forecast_hours below.
+# IMPORTANT: poll_interval_seconds should match the forecast window (21600 = 6h).
+
+entry_points:
+  - id: weather_warsaw
+    type: http_poll
+    enabled: false
+    url: "https://api.open-meteo.com/v1/forecast?latitude=52.2297&longitude=21.0122&hourly=temperature_2m,precipitation_probability,weather_code,precipitation,wind_speed_10m&forecast_hours=6&timezone=Europe%2FWarsaw"
+    method: GET
+    poll_interval_seconds: 21600
+    api_key: ""
+    headers:
+      Accept: application/json
+      User-Agent: subconscious-engine/1.0
+    handle:
+      response_format: open_meteo
+      location_name: "Warsaw, PL"
+      forecast_hours: 6
+      default_event_type: weather
+      default_priority: 1
+
+routing:
+  rules:
+    - name: warsaw_weather
+      match:
+        event_type: weather
+        entry_point: weather_warsaw
+      deliver:
+        target_sources: ["telegram"]
+        max_targets: 1
+        cooldown_minutes: 360
+        priority: 5

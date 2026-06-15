@@ -14,6 +14,7 @@ class EventSourceKind(str, Enum):
 
     FILE = "file"
     REST = "rest"
+    HTTP_POLL = "http_poll"
     IDLE = "idle"
 
 

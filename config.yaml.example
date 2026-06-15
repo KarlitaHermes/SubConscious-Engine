@@ -49,6 +49,40 @@ entry_points:
     type: idle
     enabled: true
 
+  # Outbound REST polling — engine fetches remote URLs on an interval
+  - id: external_poll
+    type: http_poll
+    enabled: false
+    url: "http://127.0.0.1:9999/api/events"
+    method: GET
+    poll_interval_seconds: 120
+    api_key: ""
+    headers:
+      Accept: application/json
+    handle:
+      response_format: events_list   # events_list | single_event | text | open_meteo
+      items_key: events              # optional JSON key when body is an object
+      id_field: id                   # dedupe field in each event object
+      default_event_type: custom
+      default_priority: 0
+
+  # Open-Meteo 6-hour outlook for Warsaw — see config/examples/weather-warsaw.yaml
+  - id: weather_warsaw
+    type: http_poll
+    enabled: false
+    url: "https://api.open-meteo.com/v1/forecast?latitude=52.2297&longitude=21.0122&hourly=temperature_2m,precipitation_probability,weather_code,precipitation,wind_speed_10m&forecast_hours=6&timezone=Europe%2FWarsaw"
+    method: GET
+    poll_interval_seconds: 21600
+    headers:
+      Accept: application/json
+      User-Agent: subconscious-engine/1.0
+    handle:
+      response_format: open_meteo
+      location_name: "Warsaw, PL"
+      forecast_hours: 6
+      default_event_type: weather
+      default_priority: 1
+
   # Optional vault integrations (disabled by default)
   - id: inbox
     type: directory
@@ -142,6 +176,16 @@ routing:
         target_sources: ["telegram"]
         max_targets: 1
         priority: 15
+
+    - name: warsaw_weather
+      match:
+        event_type: weather
+        entry_point: weather_warsaw
+      deliver:
+        target_sources: ["telegram"]
+        max_targets: 1
+        cooldown_minutes: 360
+        priority: 5
 
 # Legacy `sources` and `router` blocks are still accepted and migrated automatically.
 

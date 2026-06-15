@@ -49,16 +49,24 @@ class HandleConfig:
     handler: str = "event_file"
     default_event_type: str = "custom"
     default_priority: int = 0
+    response_format: str = "events_list"
+    items_key: str = ""
+    id_field: str = "id"
+    location_name: str = ""
+    forecast_hours: int = 0
 
 
 @dataclass
 class EntryPoint:
-    """Declarative event ingress — directory, http, or idle."""
+    """Declarative event ingress — directory, http, http_poll, or idle."""
 
     id: str
     type: str
     enabled: bool = True
     path: Optional[Path] = None
+    url: Optional[str] = None
+    method: str = "GET"
+    headers: dict[str, str] = field(default_factory=dict)
     poll_interval_seconds: float = 5.0
     archive_dir: Optional[Path] = None
     host: str = "127.0.0.1"

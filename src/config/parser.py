@@ -20,6 +20,11 @@ def parse_handle(raw: dict[str, Any] | None) -> HandleConfig:
         handler=str(item.get("handler", "event_file")),
         default_event_type=str(item.get("default_event_type", "custom")),
         default_priority=int(item.get("default_priority", 0)),
+        response_format=str(item.get("response_format", "events_list")),
+        items_key=str(item.get("items_key", "")),
+        id_field=str(item.get("id_field", "id")),
+        location_name=str(item.get("location_name", "")),
+        forecast_hours=int(item.get("forecast_hours", 0)),
     )
 
 
@@ -33,6 +38,9 @@ def parse_entry_point(item: dict[str, Any]) -> EntryPoint:
         type=ep_type,
         enabled=bool(item.get("enabled", True)),
         path=expand_path(path_raw) if path_raw else None,
+        url=str(item["url"]) if item.get("url") else None,
+        method=str(item.get("method", "GET")).upper(),
+        headers={str(k): str(v) for k, v in (item.get("headers") or {}).items()},
         poll_interval_seconds=float(item.get("poll_interval_seconds", 5)),
         archive_dir=expand_path(archive) if archive else None,
         host=str(item.get("host", "127.0.0.1")),

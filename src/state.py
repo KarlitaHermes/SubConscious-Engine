@@ -13,6 +13,10 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
+ACK_STATUS_IN_PROGRESS = "in_progress"
+ACK_STATUS_DONE = "done"
+ACK_TERMINAL_STATUSES = frozenset({ACK_STATUS_DONE, "completed"})
+
 
 class StateManager:
     """Manages engine state persistence."""
@@ -174,3 +178,70 @@ class StateManager:
         runs = self._data.setdefault("rule_last_run", {})
         runs[rule_id] = time.time()
         self.save()
+
+    def is_poll_item_seen(self, entry_point_id: str, item_key: str) -> bool:
+        """Return True if an outbound poll item was already published."""
+        seen = self._data.setdefault("poll_seen", {})
+        entry = seen.get(entry_point_id, {})
+        return item_key in entry
+
+    def mark_poll_item_seen(self, entry_point_id: str, item_key: str) -> None:
+        """Record a published outbound poll item for deduplication."""
+        seen = self._data.setdefault("poll_seen", {})
+        entry_items = seen.setdefault(entry_point_id, {})
+        entry_items[item_key] = time.time()
+        self.save()
+
+    @property
+    def last_agent_handled(self) -> Optional[float]:
+        """Timestamp of last agent ack (in_progress or done)."""
+        val = self._data.get("last_agent_handled")
+        return float(val) if val is not None else None
+
+    def is_task_in_progress(self, cooldown_key: str) -> bool:
+        """Return True if Hermes reported this cooldown_key as in progress."""
+        tasks = self._data.get("tasks_in_progress", {})
+        return cooldown_key in tasks
+
+    def record_ack(
+        self,
+        cooldown_key: str,
+        cooldown_minutes: int,
+        *,
+        status: str = ACK_STATUS_DONE,
+        reset_idle_period: bool = False,
+        event_id: Optional[str] = None,
+    ) -> None:
+        """Record agent feedback — in_progress counts as activity; done sets cooldown."""
+        now = time.time()
+        self._data["last_agent_handled"] = now
+        normalized = status.strip().lower()
+
+        tasks = self._data.setdefault("tasks_in_progress", {})
+        if normalized == ACK_STATUS_IN_PROGRESS:
+            tasks[cooldown_key] = {
+                "since": now,
+                "event_id": event_id,
+            }
+        elif normalized in ACK_TERMINAL_STATUSES:
+            tasks.pop(cooldown_key, None)
+            self._data.setdefault("cooldowns", {})[cooldown_key] = now
+            if reset_idle_period:
+                self._data["idle_period_active"] = False
+        else:
+            logger.warning("Unknown ack status %r for %s", status, cooldown_key)
+
+        acks = self._data.setdefault("acks", [])
+        acks.append(
+            {
+                "cooldown_key": cooldown_key,
+                "status": normalized,
+                "event_id": event_id,
+                "timestamp": now,
+            },
+        )
+        if len(acks) > 50:
+            self._data["acks"] = acks[-50:]
+        self.save()
+        logger.info("Agent ack %s for cooldown_key=%s", normalized, cooldown_key)
+

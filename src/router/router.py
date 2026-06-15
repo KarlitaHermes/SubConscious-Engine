@@ -56,12 +56,20 @@ class Router:
             logger.info("Event %s in cooldown (%s)", event.id, cooldown_key)
             return []
 
+        if self._state.is_task_in_progress(cooldown_key):
+            logger.info(
+                "Event %s skipped — task in progress (%s)",
+                event.id,
+                cooldown_key,
+            )
+            return []
+
         targets = await self._resolve_targets(event, rule)
         if not targets:
             logger.warning("No targets resolved for event %s type=%s", event.id, event.event_type)
             return []
 
-        results = await self._delivery.inject_many(event.text, targets)
+        results = await self._delivery.inject_many(self._delivery_text(event), targets)
         success_count = sum(1 for r in results if r.success)
         self._state.record_delivery(
             event_id=event.id,
@@ -71,6 +79,13 @@ class Router:
             cooldown_key=cooldown_key,
         )
         return results
+
+    @staticmethod
+    def _delivery_text(event: Event) -> str:
+        """Append ack hint so Hermes knows which cooldown_key to confirm."""
+        if not event.cooldown_key:
+            return event.text
+        return f"{event.text}\n\n[engine-ack:{event.cooldown_key}|in_progress,done]"
 
     async def _resolve_targets(self, event: Event, rule: RouteRule) -> list[SessionInfo]:
         """Resolve target sessions from explicit IDs, hints, and rules."""
