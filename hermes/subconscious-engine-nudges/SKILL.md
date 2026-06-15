@@ -36,8 +36,9 @@ Installed location: `~/.hermes/skills/devops/subconscious-engine-nudges` → rep
 ```bash
 SUBCONSCIOUS_ENGINE_URL=http://127.0.0.1:8770
 SUBCONSCIOUS_ENGINE_API_KEY=          # only if entry_points[].api_key is set in engine config
-SUBCONSCIOUS_CONFIG=~/.hermes/subconscious-engine/config.yaml
 ```
+
+The `ack-engine.sh` helper reads `SUBCONSCIOUS_ENGINE_URL` from env first, then falls back to parsing `~/.hermes/subconscious-engine/config.yaml`.
 
 **Engine must be running** with an enabled `http` entry point (`type: http`, default port **8770**). The running instance needs a build that includes `POST /ack` (sync repo + restart engine after pull).
 
