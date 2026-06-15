@@ -1,24 +1,149 @@
 # SubConscious Engine Configuration
 # Copy this to ~/.hermes/subconscious-engine/config.yaml
 
-# Gateway connection
+# Gateway connection (for idle detection / session activity)
 gateway:
   url: "http://127.0.0.1:8642"
   api_key: ""  # Auto-loaded from ~/.hermes/.env if empty
 
-# SubConscious Adapter connection
+# SubConscious Adapter connection (session list + inject)
 adapter:
   url: "http://127.0.0.1:8769"
 
-# Idle detection
+# Idle detection settings (used by the idle entry point)
 idle:
   threshold_minutes: 30
   cooldown_minutes: 60
   target_source: "telegram"
-  fallback_sources: ["cli"]
+  fallback_sources: ["cli"]  # CLI inject broken — see TODO.md
+  vault_root: "~/Documents/Obsidian Vault"
+  wake_grace_minutes: 10
 
-# Polling interval (seconds)
+# Polling interval for idle entry point (seconds)
 poll_interval_seconds: 60
+
+# Event entry points — where events enter the engine and how to handle them
+entry_points:
+  - id: events_drop
+    type: directory
+    enabled: true
+    path: "~/.hermes/subconscious-engine/events"
+    poll_interval_seconds: 5
+    archive_dir: "~/.hermes/subconscious-engine/events/processed"
+    handle:
+      parser: auto          # auto | json | yaml | text
+      handler: event_file   # event_file | inbox | vault_rules (future)
+      default_event_type: custom
+      default_priority: 0
+
+  - id: api
+    type: http
+    enabled: true
+    host: "127.0.0.1"
+    port: 8770
+    api_key: ""  # Optional Bearer token for POST /events
+    handle:
+      default_event_type: custom
+
+  - id: idle
+    type: idle
+    enabled: true
+
+  # Optional vault integrations (disabled by default)
+  - id: inbox
+    type: directory
+    enabled: false
+    path: "~/Documents/Obsidian Vault/COMMS/Inbox"
+    poll_interval_seconds: 30
+    handle:
+      handler: inbox
+      default_event_type: inbox_item
+
+  - id: vault_rules
+    type: directory
+    enabled: false
+    path: "~/Documents/Obsidian Vault"
+    poll_interval_seconds: 60
+    handle:
+      handler: vault_rules
+      default_event_type: vault_rule
+      default_priority: 5
+
+# Routing rules — match events and decide delivery
+# Nested match/deliver form is supported; flat event_type form still works.
+routing:
+  rules:
+    - name: maintenance
+      match:
+        event_type: maintenance
+      deliver:
+        target_sources: ["telegram"]
+        max_targets: 1
+        cooldown_minutes: 60
+        priority: 10
+
+    - name: research
+      match:
+        event_type: research
+      deliver:
+        target_sources: ["telegram"]
+        max_targets: 1
+        cooldown_minutes: 60
+        priority: 10
+
+    - name: pending_decisions
+      match:
+        event_type: pending_decisions
+      deliver:
+        target_sources: ["telegram"]
+        max_targets: 1
+        cooldown_minutes: 60
+        priority: 20
+
+    - name: alert
+      match:
+        event_type: alert
+        min_event_priority: 10
+      deliver:
+        target_sources: ["telegram"]
+        max_targets: 1
+        priority: 50
+
+    - name: broadcast
+      match:
+        event_type: broadcast
+      deliver:
+        target_sources: ["telegram"]
+        broadcast: true
+        priority: 5
+
+    - name: default
+      match:
+        event_type: "*"
+      deliver:
+        target_sources: ["telegram"]
+        max_targets: 1
+        priority: 0
+
+    - name: inbox_notify
+      match:
+        event_type: inbox_notify
+        entry_point: inbox
+      deliver:
+        target_sources: ["telegram"]
+        max_targets: 1
+        priority: 30
+
+    - name: vault_rule
+      match:
+        event_type: vault_rule
+        entry_point: vault_rules
+      deliver:
+        target_sources: ["telegram"]
+        max_targets: 1
+        priority: 15
+
+# Legacy `sources` and `router` blocks are still accepted and migrated automatically.
 
 # Logging
 logging:

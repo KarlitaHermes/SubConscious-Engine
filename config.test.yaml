@@ -1,0 +1,67 @@
+# SubConscious Engine — TEST profile
+# Safe for local/manual testing: idle OFF, separate state/logs, fast file poll.
+#
+# Usage:
+#   SUBCONSCIOUS_CONFIG=config.test.yaml python -m src
+#   python -m src --config config.test.yaml
+
+gateway:
+  url: "http://127.0.0.1:8642"
+  api_key: ""
+
+adapter:
+  url: "http://127.0.0.1:8769"
+
+idle:
+  threshold_minutes: 30
+  cooldown_minutes: 60
+  target_source: "telegram"
+  fallback_sources: []
+
+poll_interval_seconds: 120
+
+# Legacy sources block — migrated to entry_points on load
+sources:
+  file:
+    enabled: true
+    directory: "~/.hermes/subconscious-engine/events-test"
+    poll_interval_seconds: 2
+    archive_dir: "~/.hermes/subconscious-engine/events-test/processed"
+  rest:
+    enabled: true
+    host: "127.0.0.1"
+    port: 8771
+    api_key: ""
+  idle: false
+
+router:
+  rules:
+    - event_type: maintenance
+      target_sources: ["telegram"]
+      max_targets: 1
+      cooldown_minutes: 60
+      priority: 10
+      min_event_priority: 0
+    - event_type: alert
+      target_sources: ["telegram"]
+      max_targets: 1
+      priority: 50
+      min_event_priority: 10
+      active_hours: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    - event_type: broadcast
+      target_sources: ["telegram"]
+      broadcast: true
+      priority: 5
+    - event_type: "*"
+      target_sources: ["telegram"]
+      max_targets: 1
+      priority: 0
+
+logging:
+  level: "DEBUG"
+  file: "~/.hermes/logs/subconscious-engine-test.log"
+  max_bytes: 1048576
+  backup_count: 1
+
+state:
+  file: "~/.hermes/subconscious-engine/state.test.yaml"
