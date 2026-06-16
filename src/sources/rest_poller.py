@@ -10,6 +10,7 @@ import aiohttp
 
 from src.config.models import EntryPoint
 from src.events.bus import EventBus
+from src.notify_gate import NotifyGate
 from src.sources.rest_poll_parse import parse_poll_body
 from src.state import StateManager
 
@@ -24,12 +25,15 @@ class RestPollEventSource:
         entry_point: EntryPoint,
         state: StateManager,
         http: aiohttp.ClientSession,
+        *,
+        notify_gate: NotifyGate | None = None,
     ) -> None:
         if not entry_point.url:
             raise ValueError(f"http_poll entry point {entry_point.id!r} requires url")
         self._entry_point = entry_point
         self._state = state
         self._http = http
+        self._gate = notify_gate
         self._running = False
         self._task: Optional[asyncio.Task[None]] = None
 
@@ -65,6 +69,12 @@ class RestPollEventSource:
 
     async def _poll_once(self, bus: EventBus) -> None:
         """Fetch the remote URL once and publish unseen events."""
+        if self._gate is not None and not self._gate.should_fetch_poll(
+            self._state,
+            self._entry_point,
+        ):
+            return
+
         headers = dict(self._entry_point.headers)
         if self._entry_point.api_key:
             headers.setdefault("Authorization", f"Bearer {self._entry_point.api_key}")
@@ -90,8 +100,29 @@ class RestPollEventSource:
             entry_point_id=self._entry_point.id,
             handle=self._entry_point.handle,
         )
+        if self._gate is not None and not self._gate.any_actionable_poll_items(
+            self._state,
+            self._entry_point.id,
+            parsed,
+        ):
+            logger.debug(
+                "HTTP poll %s skipped publish — no actionable items",
+                self._entry_point.id,
+            )
+            return
+
         for event, dedupe_key in parsed:
-            if self._state.is_poll_item_seen(self._entry_point.id, dedupe_key):
+            if self._gate is not None:
+                reason = self._gate.check(self._state, event, poll_item_key=dedupe_key)
+                if reason is not None:
+                    self._gate.log_suppressed(
+                        event,
+                        reason,
+                        poll_item_key=dedupe_key,
+                        source=f"http_poll {self._entry_point.id}",
+                    )
+                    continue
+            elif self._state.is_poll_item_seen(self._entry_point.id, dedupe_key):
                 continue
             if await bus.publish(event):
                 self._state.mark_poll_item_seen(self._entry_point.id, dedupe_key)

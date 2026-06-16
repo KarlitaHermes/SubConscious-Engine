@@ -9,6 +9,7 @@ import pytest
 
 from src.events.models import EventSourceKind
 from src.sources.file_watcher import FileEventSource
+from src.state import StateManager
 
 
 @pytest.fixture
@@ -22,6 +23,7 @@ def file_source(tmp_path: Path) -> FileEventSource:
             path=tmp_path / "events",
             archive_dir=tmp_path / "processed",
         ),
+        StateManager(tmp_path / "state.yaml"),
     )
 
 

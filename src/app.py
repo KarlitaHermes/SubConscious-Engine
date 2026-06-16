@@ -15,6 +15,7 @@ from src.config import Config
 from src.delivery.sessions import SessionRegistry
 from src.delivery.subconscious import SubConsciousClient
 from src.events.bus import EventBus
+from src.notify_gate import NotifyGate
 from src.router.router import Router
 from src.sources.file_watcher import FileEventSource
 from src.sources.idle import IdleEventSource
@@ -39,6 +40,7 @@ class App:
         self._delivery: Optional[SubConsciousClient] = None
         self._registry: Optional[SessionRegistry] = None
         self._router: Optional[Router] = None
+        self._notify_gate: Optional[NotifyGate] = None
         self._sources: list = []
         self._tasks: list[asyncio.Task] = []
 
@@ -51,7 +53,14 @@ class App:
         )
         self._delivery = SubConsciousClient(self._config.adapter.url, self._http)
         self._registry = SessionRegistry(self._config.adapter.url, self._http)
-        self._router = Router(self._config, self._registry, self._delivery, self._state)
+        self._notify_gate = NotifyGate(self._config)
+        self._router = Router(
+            self._config,
+            self._registry,
+            self._delivery,
+            self._state,
+            notify_gate=self._notify_gate,
+        )
 
         self._install_signal_handlers()
         await self._start_sources()
@@ -83,6 +92,7 @@ class App:
 
     async def _start_sources(self) -> None:
         """Start all configured entry points."""
+        gate = self._notify_gate
         for entry_point in self._config.entry_points:
             if not entry_point.enabled:
                 continue
@@ -93,6 +103,7 @@ class App:
                         entry_point,
                         self._state,
                         vault_root=self._config.idle.vault_root,
+                        notify_gate=gate,
                     )
                 elif handler == "vault_rules":
                     inbox_dir = self._find_inbox_dir()
@@ -101,16 +112,25 @@ class App:
                         self._state,
                         vault_root=self._config.idle.vault_root,
                         inbox_dir=inbox_dir,
+                        notify_gate=gate,
                     )
                 elif handler == "event_file":
-                    src = FileEventSource(entry_point)
+                    src = FileEventSource(
+                        entry_point,
+                        self._state,
+                        notify_gate=gate,
+                    )
                 else:
                     logger.warning(
                         "Unknown directory handler %r on %s — using event_file",
                         handler,
                         entry_point.id,
                     )
-                    src = FileEventSource(entry_point)
+                    src = FileEventSource(
+                        entry_point,
+                        self._state,
+                        notify_gate=gate,
+                    )
                 self._sources.append(src)
                 self._tasks.append(asyncio.create_task(src.start(self._bus)))
             elif entry_point.type == "http":
@@ -123,7 +143,12 @@ class App:
                 self._tasks.append(asyncio.create_task(src.start(self._bus)))
             elif entry_point.type == "http_poll":
                 assert self._http is not None
-                src = RestPollEventSource(entry_point, self._state, self._http)
+                src = RestPollEventSource(
+                    entry_point,
+                    self._state,
+                    self._http,
+                    notify_gate=gate,
+                )
                 self._sources.append(src)
                 self._tasks.append(asyncio.create_task(src.start(self._bus)))
             elif entry_point.type == "idle":
@@ -133,6 +158,7 @@ class App:
                     self._registry,
                     self._state,
                     entry_point_id=entry_point.id,
+                    notify_gate=gate,
                 )
                 self._sources.append(src)
                 self._tasks.append(asyncio.create_task(src.start(self._bus)))

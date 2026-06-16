@@ -11,8 +11,10 @@ from aiohttp import web
 from src.config.models import EntryPoint, HandleConfig
 from src.config.parser import parse_entry_point
 from src.events.bus import EventBus
+from src.notify_gate import NotifyGate
 from src.sources.rest_poller import RestPollEventSource
 from src.state import StateManager
+from tests.conftest import make_config
 
 
 @pytest.fixture
@@ -58,7 +60,8 @@ async def test_poll_publishes_new_items_only(poll_stub_url: str, tmp_path: Path)
     bus = EventBus()
 
     async with aiohttp.ClientSession() as http:
-        source = RestPollEventSource(entry_point, state, http)
+        gate = NotifyGate(make_config(tmp_path, rules=[{"event_type": "*"}]))
+        source = RestPollEventSource(entry_point, state, http, notify_gate=gate)
         await source._poll_once(bus)
 
     events = []
@@ -78,6 +81,30 @@ async def test_poll_publishes_new_items_only(poll_stub_url: str, tmp_path: Path)
     bus2.close()
     second_pass = [e async for e in bus2.consume()]
     assert second_pass == []
+
+
+@pytest.mark.asyncio
+async def test_poll_suppresses_in_progress_items(poll_stub_url: str, tmp_path: Path) -> None:
+    state = StateManager(tmp_path / "state.yaml")
+    state.record_ack("custom", 60, status="in_progress")
+    entry_point = EntryPoint(
+        id="test_poll",
+        type="http_poll",
+        url=poll_stub_url,
+        poll_interval_seconds=60,
+        handle=HandleConfig(items_key="events", default_event_type="custom"),
+    )
+    bus = EventBus()
+    gate = NotifyGate(make_config(tmp_path, rules=[{"event_type": "*"}]))
+
+    async with aiohttp.ClientSession() as http:
+        source = RestPollEventSource(entry_point, state, http, notify_gate=gate)
+        await source._poll_once(bus)
+
+    bus.close()
+    events = [e async for e in bus.consume()]
+    assert events == []
+    assert state.is_poll_item_seen("test_poll", "stub-1") is False
 
 
 @pytest.mark.asyncio

@@ -109,3 +109,39 @@ Commit `9e28e74` added `POST /ack` (`in_progress` / `done`), outbound `http_poll
 - **Engine:** revert to `6ae45cf` — injects omit `delivery` (adapter treats as `queue` anyway on new adapter; old adapter ignores unknown field)
 - **Adapter:** revert to `139af67` — ignores `delivery`, injects always interrupt when busy
 - Restart gateway + engine after rollback
+
+---
+
+# Version notes — notify gate (suppress redundant Hermes nudges)
+
+**Date:** 2026-06-15
+
+## Summary
+
+The engine now applies a **shared notify gate** at every entry point before publishing events. If a task is in **cooldown**, **in progress** (Hermes ack), or has **no applicable routing rule**, the engine does not publish or inject — Hermes is only notified when something actionable remains.
+
+## What changed
+
+| File | Change |
+|------|--------|
+| `src/notify_gate.py` | `NotifyGate` — routing rule, cooldown, in-progress, and poll-seen checks |
+| `src/router/router.py` | Final delivery guard uses `NotifyGate` |
+| `src/sources/*` | `idle`, `http_poll`, `inbox`, `vault_rules`, `directory` check gate before publish |
+| `src/app.py` | Single shared `NotifyGate` wired into router and sources |
+| `tests/test_notify_gate.py` | Unit tests for gate logic |
+
+## Behavior
+
+| Condition | Effect |
+|-----------|--------|
+| No routing rule matches (time/priority) | Suppressed at source + router |
+| `cooldown_key` in cooldown | Suppressed |
+| Hermes ack `in_progress` for same `cooldown_key` | Suppressed |
+| HTTP poll item already seen | Suppressed |
+| `http_poll` text/single_event + probe blocked | HTTP fetch skipped |
+
+Suppressed items log at **DEBUG** from sources; the router logs at **INFO** when delivery is blocked.
+
+## Install
+
+Pull latest `subconscious-engine`, restart the service. No adapter or Hermes changes required.

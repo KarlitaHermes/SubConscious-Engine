@@ -11,12 +11,44 @@ from src.events.bus import EventBus
 from src.events.models import EventSourceKind
 from src.sources.idle import IdleEventSource
 from src.state import StateManager
+from src.config.parser import default_routing_rules
 from tests.conftest import make_config
 
 
 @pytest.mark.asyncio
+async def test_idle_skipped_when_task_in_progress(tmp_path: Path) -> None:
+    config = make_config(
+        tmp_path,
+        idle_enabled=True,
+        rules=default_routing_rules(),
+    )
+    state = StateManager(tmp_path / "state.yaml")
+    state.record_ack("idle_engine", 60, status="in_progress")
+    registry = AsyncMock()
+    session = MagicMock()
+    session.id = "sess_1"
+    session.source = "telegram"
+    registry.find_best_session.return_value = session
+
+    bus = EventBus()
+    source = IdleEventSource(config, registry, state)
+
+    with patch("src.sources.idle.get_last_human_activity", return_value=None):
+        await source._evaluate(bus)
+
+    bus.close()
+    published = [e async for e in bus.consume()]
+    assert published == []
+    assert state.idle_trigger_count == 0
+
+
+@pytest.mark.asyncio
 async def test_idle_alternates_maintenance_and_research(tmp_path: Path) -> None:
-    config = make_config(tmp_path, idle_enabled=True)
+    config = make_config(
+        tmp_path,
+        idle_enabled=True,
+        rules=default_routing_rules(),
+    )
     state = StateManager(tmp_path / "state.yaml")
     registry = AsyncMock()
     session = MagicMock()
@@ -68,7 +100,7 @@ async def test_wake_emits_pending_decisions(tmp_path: Path) -> None:
     reports.mkdir(parents=True)
     (reports / "wake.md").write_text("⚠️ needs decision from Rev\n", encoding="utf-8")
 
-    config = make_config(tmp_path)
+    config = make_config(tmp_path, rules=default_routing_rules())
     config.idle.vault_root = vault
     state = StateManager(tmp_path / "state.yaml")
     state.set_idle_period_active(True)

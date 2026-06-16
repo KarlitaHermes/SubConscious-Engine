@@ -13,6 +13,8 @@ import yaml
 from src.config.models import EntryPoint
 from src.events.bus import EventBus
 from src.events.models import Event, EventSourceKind
+from src.notify_gate import NotifyGate
+from src.state import StateManager
 
 logger = logging.getLogger(__name__)
 
@@ -22,14 +24,22 @@ SUPPORTED_SUFFIXES = {".json", ".yaml", ".yml", ".txt"}
 class FileEventSource:
     """Poll a drop directory for new event files."""
 
-    def __init__(self, entry_point: EntryPoint) -> None:
+    def __init__(
+        self,
+        entry_point: EntryPoint,
+        state: StateManager,
+        *,
+        notify_gate: NotifyGate | None = None,
+    ) -> None:
         if entry_point.path is None:
             raise ValueError(f"Directory entry point {entry_point.id!r} requires path")
         self._entry_point = entry_point
+        self._state = state
         self._directory = entry_point.path
         self._poll_interval = entry_point.poll_interval_seconds
         self._archive_dir = entry_point.archive_dir or (entry_point.path / "processed")
         self._handle = entry_point.handle
+        self._gate = notify_gate
         self._seen: Set[str] = set()
         self._running = False
         self._task: Optional[asyncio.Task[None]] = None
@@ -78,6 +88,15 @@ class FileEventSource:
             event = self._parse_file(path)
             if event is None:
                 continue
+            if self._gate is not None:
+                reason = self._gate.check(self._state, event)
+                if reason is not None:
+                    self._gate.log_suppressed(
+                        event,
+                        reason,
+                        source=f"directory {self._entry_point.id}",
+                    )
+                    continue
             if await bus.publish(event):
                 self._seen.add(key)
                 await asyncio.to_thread(self._archive_file, path)

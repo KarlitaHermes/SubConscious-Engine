@@ -9,7 +9,8 @@ from src.config import Config
 from src.delivery.sessions import SessionInfo, SessionRegistry
 from src.delivery.subconscious import SubConsciousClient
 from src.events.models import DeliveryResult, Event
-from src.router.rules import RouteRule, parse_rules, select_rule
+from src.notify_gate import NotifyGate, SuppressReason
+from src.router.rules import RouteRule
 from src.state import StateManager
 
 logger = logging.getLogger(__name__)
@@ -26,43 +27,25 @@ class Router:
         registry: SessionRegistry,
         delivery: SubConsciousClient,
         state: StateManager,
+        *,
+        notify_gate: NotifyGate | None = None,
     ) -> None:
         self._config = config
         self._registry = registry
         self._delivery = delivery
         self._state = state
-        self._rules = parse_rules(config.router.rules)
+        self._gate = notify_gate or NotifyGate(config)
 
     async def handle(self, event: Event) -> list[DeliveryResult]:
         """Route an event and deliver to resolved session(s)."""
-        rule = select_rule(
-            self._rules,
-            event.event_type,
-            event.priority,
-            event.entry_point,
-        )
-        if rule is None:
-            logger.info(
-                "Event %s type=%s skipped — no applicable rule (time/priority)",
-                event.id,
-                event.event_type,
-            )
+        reason = self._gate.check(self._state, event)
+        if reason is not None:
+            self._log_suppressed(event, reason)
             return []
 
-        cooldown_key = event.cooldown_key or event.event_type
-        cooldown_minutes = rule.cooldown_minutes or self._config.idle.cooldown_minutes
-
-        if self._state.is_in_cooldown(cooldown_minutes, key=cooldown_key):
-            logger.info("Event %s in cooldown (%s)", event.id, cooldown_key)
-            return []
-
-        if self._state.is_task_in_progress(cooldown_key):
-            logger.info(
-                "Event %s skipped — task in progress (%s)",
-                event.id,
-                cooldown_key,
-            )
-            return []
+        rule = self._gate.resolve_rule(event)
+        assert rule is not None
+        cooldown_key = self._gate.cooldown_key(event)
 
         targets = await self._resolve_targets(event, rule)
         if not targets:
@@ -79,6 +62,23 @@ class Router:
             cooldown_key=cooldown_key,
         )
         return results
+
+    def _log_suppressed(self, event: Event, reason: SuppressReason) -> None:
+        cooldown_key = self._gate.cooldown_key(event)
+        if reason is SuppressReason.NO_RULE:
+            logger.info(
+                "Event %s type=%s skipped — no applicable rule (time/priority)",
+                event.id,
+                event.event_type,
+            )
+        elif reason is SuppressReason.COOLDOWN:
+            logger.info("Event %s in cooldown (%s)", event.id, cooldown_key)
+        elif reason is SuppressReason.IN_PROGRESS:
+            logger.info(
+                "Event %s skipped — task in progress (%s)",
+                event.id,
+                cooldown_key,
+            )
 
     @staticmethod
     def _delivery_text(event: Event) -> str:

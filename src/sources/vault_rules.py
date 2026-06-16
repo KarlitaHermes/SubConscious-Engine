@@ -12,6 +12,7 @@ from src.checks.vault_rules import VaultRulesEngine, resolve_rules_path
 from src.config.models import EntryPoint
 from src.events.bus import EventBus
 from src.events.models import Event, EventSourceKind
+from src.notify_gate import NotifyGate
 from src.state import StateManager
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ class VaultRulesEventSource:
         *,
         vault_root: Path,
         inbox_dir: Path | None = None,
+        notify_gate: NotifyGate | None = None,
     ) -> None:
         if entry_point.path is None:
             raise ValueError(f"Vault rules entry point {entry_point.id!r} requires path")
@@ -38,6 +40,7 @@ class VaultRulesEventSource:
         self._poll_interval = entry_point.poll_interval_seconds
         self._handle = entry_point.handle
         self._state = state
+        self._gate = notify_gate
         self._engine = VaultRulesEngine(self._rules_path)
         self._running = False
         self._task: Optional[asyncio.Task[None]] = None
@@ -97,6 +100,15 @@ class VaultRulesEventSource:
                     "priority": match.priority,
                 },
             )
+            if self._gate is not None:
+                reason = self._gate.check(self._state, event)
+                if reason is not None:
+                    self._gate.log_suppressed(
+                        event,
+                        reason,
+                        source=f"vault_rules {self._entry_point.id}",
+                    )
+                    continue
             if await bus.publish(event):
                 self._state.record_rule_run(match.rule_id)
                 logger.info("Vault rule event published: %s", match.rule_id)

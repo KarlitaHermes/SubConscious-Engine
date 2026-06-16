@@ -16,6 +16,7 @@ from src.config import Config
 from src.delivery.sessions import SessionRegistry
 from src.events.bus import EventBus
 from src.events.models import Event, EventSourceKind
+from src.notify_gate import NotifyGate
 from src.signals.session import get_last_human_activity
 from src.state import StateManager
 
@@ -34,11 +35,14 @@ class IdleEventSource:
         registry: SessionRegistry,
         state: StateManager,
         entry_point_id: str = "idle",
+        *,
+        notify_gate: NotifyGate | None = None,
     ) -> None:
         self._config = config
         self._registry = registry
         self._state = state
         self._entry_point_id = entry_point_id
+        self._gate = notify_gate or NotifyGate(config)
         self._running = False
         self._task: Optional[asyncio.Task[None]] = None
 
@@ -96,14 +100,19 @@ class IdleEventSource:
         if not currently_idle:
             return
 
-        if self._state.is_in_cooldown(self._config.idle.cooldown_minutes, key=IDLE_COOLDOWN_KEY):
-            return
-
-        if self._state.is_task_in_progress(IDLE_COOLDOWN_KEY):
-            logger.debug("Idle nudge skipped — task in progress (%s)", IDLE_COOLDOWN_KEY)
-            return
-
         event_type = self._state.next_idle_event_type()
+        probe = Event(
+            text="",
+            event_type=event_type,
+            source=EventSourceKind.IDLE,
+            entry_point=self._entry_point_id,
+            cooldown_key=IDLE_COOLDOWN_KEY,
+        )
+        reason = self._gate.check(self._state, probe)
+        if reason is not None:
+            self._gate.log_suppressed(probe, reason, source="idle")
+            return
+
         threshold = self._config.idle.threshold_minutes
         vault = self._config.idle.vault_root
 
@@ -149,10 +158,17 @@ class IdleEventSource:
 
         self._state.set_idle_period_active(False)
 
-        if self._state.is_in_cooldown(self._config.idle.cooldown_minutes, key=DECISIONS_COOLDOWN_KEY):
-            return
-
-        if self._state.is_task_in_progress(DECISIONS_COOLDOWN_KEY):
+        probe = Event(
+            text="",
+            event_type="pending_decisions",
+            source=EventSourceKind.IDLE,
+            entry_point=self._entry_point_id,
+            cooldown_key=DECISIONS_COOLDOWN_KEY,
+            priority=5,
+        )
+        reason = self._gate.check(self._state, probe)
+        if reason is not None:
+            self._gate.log_suppressed(probe, reason, source="idle")
             return
 
         prompt = build_pending_decisions_prompt(

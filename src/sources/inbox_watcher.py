@@ -11,6 +11,7 @@ from src.checks.inbox import build_inbox_prompt, classify_inbox_file
 from src.config.models import EntryPoint
 from src.events.bus import EventBus
 from src.events.models import Event, EventSourceKind
+from src.notify_gate import NotifyGate
 from src.state import StateManager
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ class InboxEventSource:
         state: StateManager,
         *,
         vault_root: Path,
+        notify_gate: NotifyGate | None = None,
     ) -> None:
         if entry_point.path is None:
             raise ValueError(f"Inbox entry point {entry_point.id!r} requires path")
@@ -34,6 +36,7 @@ class InboxEventSource:
         self._handle = entry_point.handle
         self._state = state
         self._vault_root = vault_root
+        self._gate = notify_gate
         self._running = False
         self._task: Optional[asyncio.Task[None]] = None
 
@@ -91,6 +94,15 @@ class InboxEventSource:
                     "vault_dest": classification.vault_dest,
                 },
             )
+            if self._gate is not None:
+                reason = self._gate.check(self._state, event)
+                if reason is not None:
+                    self._gate.log_suppressed(
+                        event,
+                        reason,
+                        source=f"inbox {self._entry_point.id}",
+                    )
+                    continue
             if await bus.publish(event):
                 self._state.mark_file_processed(self._entry_point.id, path.name)
                 logger.info("Inbox event published for %s (%s)", path.name, classification.disposition)
