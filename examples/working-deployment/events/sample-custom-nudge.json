@@ -1,0 +1,9 @@
+{
+  "text": "[SUBCONSCIOUS ENGINE TEST] Sample file-drop nudge from examples/working-deployment/events/",
+  "event_type": "custom",
+  "cooldown_key": "example_file_drop_1",
+  "priority": 0,
+  "metadata": {
+    "source": "working-deployment-example"
+  }
+}

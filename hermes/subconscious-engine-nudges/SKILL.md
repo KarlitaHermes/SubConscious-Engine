@@ -9,7 +9,7 @@ description: >-
 
 # SubConscious Engine — Nudge Handling (Hermes)
 
-Use this skill whenever a message in your session was **injected by SubConscious Engine** (not typed by Rev). These messages start with `[SUBCONSCIOUS` or `[SUBCONSCIOUS ENGINE` and may end with an ack footer.
+Use this skill whenever a message in your session was **injected by SubConscious Engine** (not typed by User). These messages start with `[SUBCONSCIOUS` or `[SUBCONSCIOUS ENGINE` and may end with an ack footer.
 
 This skill covers **every nudge type**, the **ack protocol**, and the **`ack-engine.sh` helper** shipped in this repository.
 
@@ -77,7 +77,7 @@ Apply this to **every** subconscious nudge except test messages (section 10).
 A subconscious injection usually:
 
 - Starts with `[SUBCONSCIOUS` or `[SUBCONSCIOUS ENGINE`
-- Was **not** typed by Rev in chat (adapter inject)
+- Was **not** typed by User in chat (adapter inject)
 - Often ends with:
 
 ```
@@ -103,7 +103,7 @@ Or with optional event id:
 ack-engine.sh idle_engine in_progress --event-id optional-uuid
 ```
 
-**Effect:** counts as **activity** (idle timer resets even without Rev typing); blocks the **same** `cooldown_key` from firing again; does **not** start cooldown yet.
+**Effect:** counts as **activity** (idle timer resets even without User typing); blocks the **same** `cooldown_key` from firing again; does **not** start cooldown yet.
 
 ### Step C — Do the work
 
@@ -121,7 +121,7 @@ ack-engine.sh COOLDOWN_KEY done --minutes 60 --reset-idle
 
 **Effect:** sets cooldown, clears in-progress, counts as activity.
 
-### Step E — Report to Rev
+### Step E — Report to User
 
 Summarize what you did. Do not paste the full ack footer unless debugging.
 
@@ -134,7 +134,7 @@ Summarize what you did. Do not paste the full ack footer unless debugging.
 | Injected message footer | `[engine-ack:KEY\|in_progress,done]` → `KEY` |
 | Idle maintenance / research | Always `idle_engine` (shared between both types) |
 | Pending decisions wake nudge | `pending_decisions` |
-| Open-Meteo weather | `open-meteo:<location>:<window>` e.g. `open-meteo:Warsaw, PL:2026-06-15T16:00` |
+| Open-Meteo weather | `open-meteo:<location>:<window>` e.g. `open-meteo:Example City:2026-06-15T16:00` |
 | Inbox file | `inbox:<filename>` e.g. `inbox:news-digest-2026-06-15.md` |
 | Vault rule | `vault_rule:<rule_id>` from metadata in prompt |
 | Custom HTTP / file drop | `cooldown_key` field if author set it; else use `event_type` |
@@ -147,7 +147,7 @@ Summarize what you did. Do not paste the full ack footer unless debugging.
 
 ### 5.1 Maintenance (`event_type: maintenance`, `cooldown_key: idle_engine`)
 
-**When:** Rev idle ≥ threshold (default 30 min). Odd idle triggers alternate maintenance/research; maintenance is the odd cycles.
+**When:** User idle ≥ threshold (default 30 min). Odd idle triggers alternate maintenance/research; maintenance is the odd cycles.
 
 **Prompt signals:**
 
@@ -164,9 +164,9 @@ Summarize what you did. Do not paste the full ack footer unless debugging.
    - Pick **one** due task; if none due → report "All tasks up to date" and stop
    - If due → execute, write report to Reports, update Last done in task file
 3. `ack-engine.sh idle_engine done --minutes 60 --reset-idle`
-4. Brief summary to Rev
+4. Brief summary to User
 
-**Do not** run kernel upgrades, Proxmox upgrades, or destructive ops without Rev's explicit approval.
+**Do not** run kernel upgrades, Proxmox upgrades, or destructive ops without User's explicit approval.
 
 ---
 
@@ -188,7 +188,7 @@ Summarize what you did. Do not paste the full ack footer unless debugging.
    - Check Reports for research in last **48h** — skip topics already covered
    - Pick **one** new topic from web-research-tasks or DREAM journal
    - Research thoroughly; write findings to Reports
-   - Flag Rev only if genuinely interesting or urgent
+   - Flag User only if genuinely interesting or urgent
 3. `ack-engine.sh idle_engine done --minutes 60 --reset-idle`
 
 If you already handled an idle nudge (`idle_engine` in progress or done recently), do not start duplicate work — ack done with a short "already handled" note if needed.
@@ -197,11 +197,11 @@ If you already handled an idle nudge (`idle_engine` in progress or done recently
 
 ### 5.3 Pending decisions (`event_type: pending_decisions`, `cooldown_key: pending_decisions`)
 
-**When:** Rev returns after an idle period (wake within `wake_grace_minutes`, default 10 min). Separate from maintenance/research.
+**When:** User returns after an idle period (wake within `wake_grace_minutes`, default 10 min). Separate from maintenance/research.
 
 **Prompt signals:**
 
-- `[SUBCONSCIOUS] Rev has been idle for ~N minutes and just came back`
+- `[SUBCONSCIOUS] User has been idle for ~N minutes and just came back`
 - Bullet list of items from recent Reports / Dream Backlog
 
 **Your job:**
@@ -209,30 +209,30 @@ If you already handled an idle nudge (`idle_engine` in progress or done recently
 1. `ack-engine.sh pending_decisions in_progress`
 2. Spawn sub-agent to evaluate each item:
    - **(a)** easy win — do it now
-   - **(b)** needs Rev — one-liner summary for Rev
+   - **(b)** needs User — one-liner summary for User
    - **(c)** already handled / not actionable — mark done
-3. You review classifications and act (don't blindly spam Rev)
+3. You review classifications and act (don't blindly spam User)
 4. `ack-engine.sh pending_decisions done --minutes 60 --reset-idle`
 
-**Decision markers** the engine scans for: `⚠️`, `needs decision`, `Rev to decide`, `for Rev:`, `should we`, `ACTION REQUIRED`.
+**Decision markers** the engine scans for: `⚠️`, `needs decision`, `User to decide`, `for User:`, `should we`, `ACTION REQUIRED`.
 
 ---
 
 ### 5.4 Weather (`event_type: weather`, `cooldown_key: open-meteo:...`)
 
-**When:** `http_poll` entry point with `response_format: open_meteo` (e.g. Warsaw 6-hour outlook every 6h).
+**When:** `http_poll` entry point with `response_format: open_meteo` (e.g. 6-hour outlook every 6h).
 
 **Prompt signals:**
 
 - Weather summary, precipitation, ride/outdoors advisory
-- Footer key like `open-meteo:Warsaw, PL:2026-06-15T16:00`
+- Footer key like `open-meteo:Example City:2026-06-15T16:00`
 
 **Your job:**
 
-1. `ack-engine.sh 'open-meteo:Warsaw, PL:2026-06-15T16:00' in_progress` (use exact key from footer)
-2. Read the advisory; notify Rev only if:
+1. `ack-engine.sh 'open-meteo:Example City:2026-06-15T16:00' in_progress` (use exact key from footer)
+2. Read the advisory; notify User only if:
    - Storm / heavy rain / urgent ride warning, or
-   - Rev asked for weather updates
+   - User asked for weather updates
 3. Otherwise a short "noted" is enough
 4. `ack-engine.sh 'open-meteo:...' done --minutes 360` (match poll interval, typically 360 for 6h)
 
@@ -253,7 +253,7 @@ If you already handled an idle nudge (`idle_engine` in progress or done recently
 **Your job:**
 
 1. `ack-engine.sh inbox:FILENAME in_progress`
-2. Review content; **notify Rev** with a concise summary and link/path
+2. Review content; **notify User** with a concise summary and link/path
 3. File to suggested vault destination if appropriate
 4. `ack-engine.sh inbox:FILENAME done --minutes 60`
 
@@ -268,7 +268,7 @@ If you already handled an idle nudge (`idle_engine` in progress or done recently
 **Your job:**
 
 1. `ack-engine.sh inbox:FILENAME in_progress`
-2. Classify: notify Rev | file to vault | delegate to sub-agent | routine skip
+2. Classify: notify User | file to vault | delegate to sub-agent | routine skip
 3. Move/process per `Suggested vault destination` in prompt
 4. `ack-engine.sh inbox:FILENAME done --minutes 60`
 
@@ -298,7 +298,7 @@ If you already handled an idle nudge (`idle_engine` in progress or done recently
 **Your job:**
 
 1. Ack `in_progress` with the correct key
-2. Treat as **urgent** — investigate and notify Rev if action needed
+2. Treat as **urgent** — investigate and notify User if action needed
 3. Ack `done` with appropriate cooldown (often 60; critical recurring alerts may use longer)
 
 ---
@@ -325,7 +325,7 @@ Independent keys can fire in parallel:
 
 **Same key:** while `idle_engine` is `in_progress`, the engine **skips** another idle maintenance/research inject.
 
-**Practical rule:** one sub-agent per nudge; ack each key on its own timeline. Do not merge unrelated nudges into one giant task unless Rev asks.
+**Practical rule:** one sub-agent per nudge; ack each key on its own timeline. Do not merge unrelated nudges into one giant task unless User asks.
 
 ---
 
@@ -347,7 +347,7 @@ ack-engine.sh idle_engine in_progress
 ack-engine.sh idle_engine done --minutes 60 --reset-idle
 
 # Weather (quote keys with spaces/colons)
-ack-engine.sh 'open-meteo:Warsaw, PL:2026-06-15T16:00' done --minutes 360
+ack-engine.sh 'open-meteo:Example City:2026-06-15T16:00' done --minutes 360
 
 # Override URL (rare)
 ack-engine.sh idle_engine in_progress --url http://127.0.0.1:8771
@@ -398,7 +398,7 @@ The helper script reads config automatically when env is not set.
 
 Routing rules in config map `event_type` → telegram (or other) delivery. See repo `config.yaml.example` and `README-AGENT.md`.
 
-**Vault root** (for idle/inbox paths): `idle.vault_root` in config, typically `~/Documents/Obsidian Vault`.
+**Vault root** (for idle/inbox paths): `idle.vault_root` in config, e.g. `~/path/to/your/obsidian-vault`.
 
 ---
 
@@ -406,12 +406,12 @@ Routing rules in config map `event_type` → telegram (or other) delivery. See r
 
 Messages containing **`[SUBCONSCIOUS ENGINE TEST]`**:
 
-Rev's instruction: acknowledge receipt, show original message verbatim, **nothing else**.
+User's instruction: acknowledge receipt, show original message verbatim, **nothing else**.
 
 1. Do **not** call `/ack` unless explicitly testing the ack flow
 2. Do **not** spawn sub-agents or write reports
 3. Reply briefly: received + quote original
-4. When Rev says testing is over, resume normal procedure for real nudges
+4. When User says testing is over, resume normal procedure for real nudges
 
 ---
 
@@ -454,5 +454,5 @@ Rev's instruction: acknowledge receipt, show original message verbatim, **nothin
 [ ] ack-engine.sh KEY in_progress
 [ ] Type-specific work (section 5)
 [ ] ack-engine.sh KEY done [--minutes N] [--reset-idle]
-[ ] Short summary to Rev
+[ ] Short summary to User
 ```

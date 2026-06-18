@@ -1,5 +1,8 @@
 # SubConscious Engine Configuration
 # Copy this to ~/.hermes/subconscious-engine/config.yaml
+#
+# For a sanitized PRODUCTION-shaped example (idle + weather + routing as deployed),
+# see examples/working-deployment/engine-config.production.yaml and examples/WORKING-DEPLOYMENT.md
 
 # Gateway connection (for idle detection / session activity)
 gateway:

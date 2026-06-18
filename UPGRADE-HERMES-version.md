@@ -209,7 +209,7 @@ curl -s http://127.0.0.1:8770/health
 
 ## 4. Hermes skill & ack helper (use Hermes's own skills path)
 
-Rev prefers Hermes-managed skills over `install-skill.sh` if you already maintain the skill elsewhere. Minimum: ensure the agent knows the **two-step ack protocol** and can run `ack-engine.sh`.
+User prefers Hermes-managed skills over `install-skill.sh` if you already maintain the skill elsewhere. Minimum: ensure the Agent knows the **two-step ack protocol** and can run `ack-engine.sh`.
 
 From the engine repo (for the helper script only):
 
@@ -322,6 +322,6 @@ sudo systemctl restart subconscious-engine
 - **One engine** on 8770 per host — the systemd service owns it after upgrade.
 - Use throwaway `cooldown_key` values for tests (e.g. `hermes_gate_test_1`) so you do not block real idle/weather nudges.
 - Injected messages include `[engine-ack:KEY|in_progress,done]` when `cooldown_key` is set — always ack both steps.
-- **Rev approval:** run section 2 (pytest) and section 5 (integration) before section 3.3 restart in production if you upgraded a live system during business hours.
+- **User approval:** run section 2 (pytest) and section 5 (integration) before section 3.3 restart in production if you upgraded a live system during business hours.
 
 **Docs in repos:** `VERSION-NOTES.md` in each repo; full nudge reference in `hermes/subconscious-engine-nudges/SKILL.md`.

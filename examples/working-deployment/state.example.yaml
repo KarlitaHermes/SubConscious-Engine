@@ -1,0 +1,59 @@
+# SubConscious Engine — state file STRUCTURE (synthetic example)
+#
+# Mirrored from: ~/.hermes/subconscious-engine/state.yaml
+# DO NOT copy this file into production — the engine creates and updates state.yaml.
+#
+# Censored: fake timestamps, example session IDs, no real delivery history volume.
+
+last_trigger: 1710000000.0
+trigger_count: 3
+idle_trigger_count: 12
+idle_period_active: false
+last_decisions_nudge: 1709990000.0
+last_observed_activity: 1710000100.0
+last_agent_handled: 1710000200.0
+
+cooldowns:
+  idle_engine: 1710000200.0
+  pending_decisions: 1709995000.0
+  open-meteo:Example City:2026-06-15T12:00: 1709998000.0
+  hermes_gate_test_1: 1709999000.0
+
+tasks_in_progress:
+  idle_engine:
+    since: 1710000150.0
+    event_id: null
+
+acks:
+  - cooldown_key: idle_engine
+    status: in_progress
+    event_id: null
+    timestamp: 1710000150.0
+  - cooldown_key: idle_engine
+    status: done
+    event_id: null
+    timestamp: 1710000200.0
+
+deliveries:
+  - event_id: a1b2c3d4e5f6478990abcdef12345678
+    event_type: maintenance
+    session_ids:
+      - sess_example_telegram_01
+    success: true
+    timestamp: 1710000000.0
+  - event_id: b2c3d4e5f6478990abcdef1234567890
+    event_type: weather
+    session_ids:
+      - sess_example_telegram_01
+    success: true
+    timestamp: 1709998000.0
+
+poll_seen:
+  weather_example:
+    open-meteo:Example City:2026-06-15T12:00: 1709998000.0
+
+processed_files:
+  events_drop:
+    sample-nudge.json: 1709997000.0
+
+rule_last_run: {}

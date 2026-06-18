@@ -1,0 +1,30 @@
+# Install: sudo cp this file /etc/systemd/system/subconscious-engine.service
+# Edit WorkingDirectory, User, Group, and ExecStart venv path for your host.
+# Then: sudo systemctl daemon-reload && sudo systemctl enable --now subconscious-engine
+
+[Unit]
+Description=SubConscious Engine - Autonomous session injection daemon
+After=network-online.target hermes-gateway.service
+Wants=network-online.target
+Requires=hermes-gateway.service
+
+[Service]
+Type=simple
+User=YOUR_USER
+Group=YOUR_USER
+WorkingDirectory=/home/YOUR_USER/workspace/subconscious-engine
+ExecStart=/home/YOUR_USER/workspace/subconscious-engine/.venv/bin/python -m src
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/YOUR_USER/.hermes/subconscious-engine /home/YOUR_USER/.hermes/logs
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=subconscious-engine
+
+[Install]
+WantedBy=multi-user.target

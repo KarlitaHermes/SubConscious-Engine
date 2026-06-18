@@ -58,4 +58,4 @@
 
 ### 13. Don't Test Against Production
 **Problem:** Early tests injected messages into real Telegram sessions.
-**Solution:** Use a dedicated test session. Never test against Rev's main session.
+**Solution:** Use a dedicated test session. Never test against User's main session.

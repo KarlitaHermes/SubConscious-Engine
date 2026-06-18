@@ -1,0 +1,20 @@
+# Hermes gateway — SubConscious-related excerpt only (sanitized)
+#
+# Merge these keys into ~/.hermes/config.yaml
+# DO NOT commit your full Hermes config — it contains API keys and platform secrets.
+#
+# After editing:
+#   sudo systemctl restart hermes-gateway
+#
+# Adapter plugin checkout must be symlinked:
+#   ln -sfn ~/workspace/subconscious-adapter ~/.hermes/plugins/subconscious-adapter
+
+platforms:
+  subconscious:
+    enabled: true
+    port: 8769
+
+plugins:
+  enabled:
+    - subconscious-adapter
+    # ... other plugins (vault, memory, etc.) — omitted

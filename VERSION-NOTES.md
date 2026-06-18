@@ -5,7 +5,7 @@
 
 ## Summary
 
-Subconscious nudges no longer interrupt Hermes when Rev (or the agent) is already mid-task. Injections use **queue delivery**: wait for the next turn if busy, run immediately if idle.
+Subconscious nudges no longer interrupt Hermes when the User or Agent is already mid-task. Injections use **queue delivery**: wait for the next turn if busy, run immediately if idle.
 
 ## What changed
 
@@ -31,7 +31,7 @@ Subconscious nudges no longer interrupt Hermes when Rev (or the agent) is alread
 
 ## Why
 
-Previously, subconscious injects went through `_handle_message` like a normal Rev message. With `busy_input_mode: interrupt` (default), a nudge fired while Hermes was working would **cut off** the current turn — bad for maintenance/weather/idle nudges during active work.
+Previously, subconscious injects went through `_handle_message` like a normal User message. With `busy_input_mode: interrupt` (default), a nudge fired while Hermes was working would **cut off** the current turn — bad for maintenance/weather/idle nudges during active work.
 
 `/queue` already solves this for human chat. This release makes subconscious injects behave the same way automatically.
 

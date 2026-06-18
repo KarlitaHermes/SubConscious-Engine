@@ -1,0 +1,99 @@
+# SubConscious Engine — orchestrator replica (minimal working example)
+#
+# Mirrored from: ~/.hermes/subconscious-engine/config-orchestrator-replica.yaml
+# Copy to:       ~/.hermes/subconscious-engine/config.yaml
+#
+# Idle + file drop + inbound HTTP only — no weather poll.
+# Matches original orchestrator behaviour before http_poll / Open-Meteo.
+
+gateway:
+  url: http://127.0.0.1:8642
+  api_key: ""
+
+adapter:
+  url: http://127.0.0.1:8769
+
+idle:
+  threshold_minutes: 30
+  cooldown_minutes: 60
+  target_source: telegram
+  fallback_sources: []
+  vault_root: ~/path/to/your/obsidian-vault
+  wake_grace_minutes: 10
+
+poll_interval_seconds: 60
+
+entry_points:
+  - id: idle
+    type: idle
+    enabled: true
+
+  - id: events_drop
+    type: directory
+    enabled: true
+    path: ~/.hermes/subconscious-engine/events
+    poll_interval_seconds: 5
+    archive_dir: ~/.hermes/subconscious-engine/events/processed
+    handle:
+      parser: auto
+      handler: event_file
+      default_event_type: custom
+      default_priority: 0
+
+  - id: api
+    type: http
+    enabled: true
+    host: 127.0.0.1
+    port: 8770
+    api_key: ""
+    handle:
+      default_event_type: custom
+
+routing:
+  rules:
+    - name: idle-maintenance
+      match:
+        event_type: maintenance
+        entry_point: idle
+      deliver:
+        target_sources: [telegram]
+        max_targets: 1
+        cooldown_minutes: 60
+        priority: 10
+
+    - name: idle-research
+      match:
+        event_type: research
+        entry_point: idle
+      deliver:
+        target_sources: [telegram]
+        max_targets: 1
+        cooldown_minutes: 60
+        priority: 10
+
+    - name: idle-pending-decisions
+      match:
+        event_type: pending_decisions
+        entry_point: idle
+      deliver:
+        target_sources: [telegram]
+        max_targets: 1
+        cooldown_minutes: 60
+        priority: 20
+
+    - name: manual-events
+      match:
+        event_type: "*"
+      deliver:
+        target_sources: [telegram]
+        max_targets: 1
+        priority: 0
+
+logging:
+  level: INFO
+  file: ~/.hermes/logs/subconscious-engine.log
+  max_bytes: 10485760
+  backup_count: 3
+
+state:
+  file: ~/.hermes/subconscious-engine/state.yaml

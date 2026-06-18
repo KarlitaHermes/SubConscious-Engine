@@ -36,7 +36,7 @@
 For live tests until session is free:
 - Use **test profile**: `python -m src --config config.test.yaml` (idle OFF, port 8771, separate state/logs)
 - Prefer **mocked HTTP** in pytest (no real inject)
-- If a live inject is required: use a **dedicated test session**, not Rev's main Telegram session
+- If a live inject is required: use a **dedicated test session**, not User's main Telegram session
 - Keep test message text clearly marked `[SUBCONSCIOUS ENGINE TEST]` and **do not** reference maintenance task files or open-ended instructions
 - **Disable idle source** in test config (`sources.idle: false`) to avoid maintenance prompts on startup
 - Wait for user confirmation before further live Telegram tests

@@ -1,0 +1,44 @@
+---
+description: Sanitize examples, docs, and skills before committing — no secrets or live deployment data
+alwaysApply: true
+---
+
+# Sanitize public repo content
+
+Anything committed to SubConscious-Engine (or copied into examples/skills/docs) must be safe to publish on GitHub.
+
+## Never commit
+
+- Live `~/.hermes/subconscious-engine/config.yaml`, `state.yaml`, backups, logs
+- Full `~/.hermes/config.yaml` (API keys, platform secrets, tokens)
+- Real session IDs, Telegram user IDs, email addresses, personal names tied to accounts
+- Real cron job UUIDs from production Hermes
+- Gmail/IMAP credentials or fetch scripts with embedded secrets
+- Comments like `# WAS: <real path>` that reveal production paths
+
+## Always replace with placeholders
+
+| Live value | Use instead |
+|------------|-------------|
+| `~/Documents/Obsidian Vault` | `~/path/to/your/obsidian-vault` |
+| `/home/<user>/...` | `~/workspace/...` or `YOUR_USER` in systemd units |
+| Real email addresses | "trusted personal email (configure locally)" |
+| Personal names (`Rev`, `Karla`, etc.) | **User** (human) and **Agent** (Hermes) in published `.md` |
+| `weather_warsaw` / city-specific coords | `weather_example` / `Example City` unless already public generic docs |
+| Production session IDs | `sess_example_*` |
+| Real timestamps from state | Round synthetic values (e.g. `1710000000.0`) |
+
+## Safe to include
+
+- Source code, tests, generic `config.yaml.example`
+- Sanitized **shapes** in `examples/working-deployment/` and `state.example.yaml`
+- Hermes gateway **snippet** only (`platforms.subconscious` + plugin enable)
+- Public Open-Meteo URLs with generic coordinates when documented as examples
+
+## Before committing docs/skills/examples
+
+1. Grep for: `api_key`, `token`, `secret`, `@`, real vault paths, `/home/hermes`, production job IDs, `\bRev\b`, `\bKarla\b`
+2. Remove "dumped from live host" paths that fingerprint the machine
+3. Prefer `docs/CRON-AND-INBOX.md` patterns over copying live Hermes skill files verbatim
+
+When in doubt, use a fictional example and link to `examples/WORKING-DEPLOYMENT.md`.

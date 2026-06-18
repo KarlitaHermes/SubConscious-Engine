@@ -19,12 +19,12 @@ It does **not** run inside the Hermes Gateway process. It is a separate program 
 
 ### 1.1 Hermes agent: handling nudges
 
-If you are **Hermes** (the agent receiving injected messages), you also need the **nudge-handling skill** in this repository — not just the engine daemon.
+If you are **Hermes** (the Agent receiving injected messages), you also need the **nudge-handling skill** in this repository — not just the engine daemon.
 
 | Step | Action |
 |------|--------|
 | 1 | Pull this repo (`git pull`) |
-| 2 | Run `./hermes/install-skill.sh` to link the skill into `~/.hermes/skills/devops/subconscious-engine-nudges` |
+| 2 | Run `./hermes/install-skill.sh` to link skills into `~/.hermes/skills/` (nudges, config, inbox-digest-curator) |
 | 3 | Ensure the engine is running with `POST /ack` support (restart after sync) |
 | 4 | On every subconscious injection: read `hermes/subconscious-engine-nudges/SKILL.md` and use `scripts/ack-engine.sh` |
 
@@ -475,7 +475,7 @@ curl -s http://127.0.0.1:8771/health
 
 Nudge types (idle, weather, pending decisions, etc.) run **independently**. Each has its own `cooldown_key`. Hermes may be working on one nudge while another fires — unless Hermes tells the engine what's happening.
 
-When Hermes handles a subconscious injection **without Rev typing**, the gateway still looks idle. The engine needs a **feedback channel**.
+When Hermes handles a subconscious injection **without User typing**, the gateway still looks idle. The engine needs a **feedback channel**.
 
 **Two ack statuses:**
 
@@ -999,7 +999,7 @@ After restart, within 60 seconds the engine should log publication of `notify-00
 
 ### 13.11 Example: 6-hour weather outlook for Warsaw (Open-Meteo)
 
-Poll every **6 hours**, fetch the **next 6 hours** of hourly forecast, inject an advisory the agent can use to warn about storms or say if a bike ride is OK.
+Poll every **6 hours**, fetch the **next 6 hours** of hourly forecast, inject an advisory the Agent can use to warn about storms or say if a bike ride is OK.
 
 **Repository file:** `config/examples/weather-warsaw.yaml`
 
@@ -1080,7 +1080,7 @@ Hourly:
 
 Ride/outdoors: Not recommended — thunderstorm risk in this window.
 
-Karla: warn Rev only if alerts above are significant; otherwise a brief OK is fine.
+Agent: warn User only if alerts above are significant; otherwise a brief OK is fine.
 ```
 
 Storm/rain alerts raise event `priority` to at least 15 for routing.
@@ -1106,7 +1106,7 @@ Storm/rain alerts raise event `priority` to at least 15 for routing.
 
 ## 14. Hermes nudge-handling skill (full install)
 
-This repository ships a **Hermes skill** so the agent knows how to handle every subconscious nudge and call `POST /ack` correctly.
+This repository ships a **Hermes skill** so the Agent knows how to handle every subconscious nudge and call `POST /ack` correctly.
 
 ### 14.1 What is included
 
@@ -1151,7 +1151,7 @@ Otherwise `ack-engine.sh` reads `host`, `port`, and `api_key` from the first ena
 2. **`ack-engine.sh KEY in_progress`** — immediately when starting work.
 3. Handle per nudge type (see SKILL.md section 5).
 4. **`ack-engine.sh KEY done`** — when finished, with appropriate `--minutes`.
-5. Summarize for Rev.
+5. Summarize for User.
 
 ### 14.5 Nudge types covered in SKILL.md
 
@@ -1161,7 +1161,7 @@ Otherwise `ack-engine.sh` reads `host`, `port`, and `api_key` from the first ena
 | Research | `idle_engine` | One research topic → Reports |
 | Pending decisions | `pending_decisions` | Wake nudge — classify decision items |
 | Weather (Open-Meteo) | `open-meteo:...` | Advisory; notify if urgent |
-| Inbox notify | `inbox:<file>` | Summarize for Rev |
+| Inbox notify | `inbox:<file>` | Summarize for User |
 | Inbox delegate/review | `inbox:<file>` | File, delegate, or routine |
 | Vault rule | `vault_rule:<id>` | Follow matched rule prompt |
 | Alert / custom / broadcast | footer or `event_type` | Follow injected instructions |
@@ -1244,8 +1244,10 @@ curl -s http://127.0.0.1:8771/health
 | `VERSION-NOTES.md` | **Upgrade notes** — queue delivery, install steps, rollback |
 | `hermes/subconscious-engine-nudges/SKILL.md` | **Hermes skill** — handle all nudge types + `/ack` |
 | `hermes/subconscious-engine-nudges/scripts/ack-engine.sh` | Shell helper for `POST /ack` |
-| `hermes/install-skill.sh` | Install skill into `~/.hermes/skills/devops/` |
+| `hermes/install-skill.sh` | Install nudges + config + inbox-digest-curator skills |
 | `config.yaml.example` | Full production config template (includes `http_poll` + Warsaw weather) |
+| `examples/WORKING-DEPLOYMENT.md` | **Live deployment** — sanitized configs, file map, Hermes gateway snippet |
+| `docs/CRON-AND-INBOX.md` | **Cron → inbox → SE** — `deliver: local`, filename prefixes, agent workflow |
 | `config/examples/weather-warsaw.yaml` | Copy-paste Open-Meteo Warsaw `http_poll` example |
 | `config.test.yaml` | Safe test profile (idle off) |
 | `ARCHITECTURE.md` | Internal design overview |

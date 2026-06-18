@@ -1,0 +1,157 @@
+# SubConscious Engine — PRODUCTION working example (sanitized)
+#
+# Mirrored from: ~/.hermes/subconscious-engine/config.yaml
+# Copy to:       ~/.hermes/subconscious-engine/config.yaml
+#
+# Censored: api_key fields empty (set locally or use ~/.hermes/.env auto-load).
+#           vault_root is a placeholder — set to your Obsidian vault path.
+#
+# Differs from config.yaml.example:
+#   - Longer idle cooldown (240m), 60m idle threshold
+#   - weather_example http_poll enabled
+#   - inbox watcher on vault COMMS/Inbox (cron → SE pipeline)
+#   - Routing rules tied to entry_point with production cooldowns
+#   - No CLI fallback (telegram only)
+
+adapter:
+  url: http://127.0.0.1:8769
+
+entry_points:
+  - enabled: true
+    id: idle
+    type: idle
+
+  - archive_dir: ~/.hermes/subconscious-engine/events/processed
+    enabled: true
+    handle:
+      default_event_type: custom
+      default_priority: 0
+      handler: event_file
+      parser: auto
+    id: events_drop
+    path: ~/.hermes/subconscious-engine/events
+    poll_interval_seconds: 5
+    type: directory
+
+  - enabled: true
+    handle:
+      default_event_type: inbox_item
+      default_priority: 0
+      handler: inbox
+    id: inbox
+    path: ~/path/to/your/obsidian-vault/COMMS/Inbox
+    poll_interval_seconds: 30
+    type: directory
+
+  - api_key: ""   # optional Bearer for POST /events — set locally if needed
+    enabled: true
+    handle:
+      default_event_type: custom
+    host: 127.0.0.1
+    id: api
+    port: 8770
+    type: http
+
+  - enabled: true
+    handle:
+      default_event_type: weather
+      default_priority: 1
+      forecast_hours: 6
+      location_name: Example City
+      response_format: open_meteo
+    headers:
+      Accept: application/json
+      User-Agent: subconscious-engine/1.0
+    id: weather_example
+    method: GET
+    poll_interval_seconds: 21600   # 6 hours — match forecast window
+    type: http_poll
+    url: https://api.open-meteo.com/v1/forecast?latitude=50.0&longitude=10.0&hourly=temperature_2m,precipitation_probability,weather_code,precipitation,wind_speed_10m&forecast_hours=6&timezone=UTC
+
+gateway:
+  api_key: ""   # auto-loaded from ~/.hermes/.env when empty
+  url: http://127.0.0.1:8642
+
+idle:
+  cooldown_minutes: 240
+  fallback_sources: []
+  target_source: telegram
+  threshold_minutes: 60
+  vault_root: ~/path/to/your/obsidian-vault
+  wake_grace_minutes: 10
+
+logging:
+  backup_count: 3
+  file: ~/.hermes/logs/subconscious-engine.log
+  level: INFO
+  max_bytes: 10485760
+
+poll_interval_seconds: 300
+
+routing:
+  rules:
+    - name: idle-maintenance
+      match:
+        entry_point: idle
+        event_type: maintenance
+      deliver:
+        cooldown_minutes: 480
+        max_targets: 1
+        priority: 10
+        target_sources:
+          - telegram
+
+    - name: idle-research
+      match:
+        entry_point: idle
+        event_type: research
+      deliver:
+        cooldown_minutes: 360
+        max_targets: 1
+        priority: 10
+        target_sources:
+          - telegram
+
+    - name: idle-pending-decisions
+      match:
+        entry_point: idle
+        event_type: pending_decisions
+      deliver:
+        cooldown_minutes: 240
+        max_targets: 1
+        priority: 20
+        target_sources:
+          - telegram
+
+    - name: inbox_notify
+      match:
+        entry_point: inbox
+        event_type: inbox_notify
+      deliver:
+        max_targets: 1
+        priority: 30
+        target_sources:
+          - telegram
+
+    - name: manual-events
+      match:
+        event_type: "*"
+      deliver:
+        max_targets: 1
+        priority: 0
+        target_sources:
+          - telegram
+
+    - name: example_weather
+      match:
+        entry_point: weather_example
+        event_type: weather
+      deliver:
+        cooldown_minutes: 720
+        max_targets: 1
+        priority: 5
+        target_sources:
+          - telegram
+
+state:
+  file: ~/.hermes/subconscious-engine/state.yaml
