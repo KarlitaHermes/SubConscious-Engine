@@ -40,7 +40,7 @@ def test_classify_unknown_file_needs_review(tmp_path: Path) -> None:
 
 
 def test_build_vault_context_report_count(tmp_path: Path) -> None:
-    reports = tmp_path / "Projects" / "ORCHESTRATOR" / "Reports"
+    reports = tmp_path / "Projects" / "Maintenance" / "Reports"
     reports.mkdir(parents=True)
     (reports / "a.md").write_text("one", encoding="utf-8")
     (reports / "b.md").write_text("two", encoding="utf-8")
@@ -53,12 +53,12 @@ def test_vault_rules_engine_matches_report_rule(tmp_path: Path) -> None:
     rules = tmp_path / "rules.md"
     rules.write_text(
         "## Rule 3: Report Consolidation\n"
-        "**Condition:** >5 reports in `Projects/ORCHESTRATOR/Reports/`\n"
+        "**Condition:** >5 reports in `Projects/Maintenance/Reports/`\n"
         "**Action:** Archive one-liners\n"
         "**Priority:** LOW\n",
         encoding="utf-8",
     )
-    reports = tmp_path / "Projects" / "ORCHESTRATOR" / "Reports"
+    reports = tmp_path / "Projects" / "Maintenance" / "Reports"
     reports.mkdir(parents=True)
     for idx in range(6):
         (reports / f"r{idx}.md").write_text("x", encoding="utf-8")
@@ -70,7 +70,7 @@ def test_vault_rules_engine_matches_report_rule(tmp_path: Path) -> None:
 
 
 def test_resolve_rules_path_from_vault_root(tmp_path: Path) -> None:
-    rules = tmp_path / "Projects" / "ORCHESTRATOR" / "rules.md"
+    rules = tmp_path / "Projects" / "Maintenance" / "rules.md"
     rules.parent.mkdir(parents=True)
     rules.write_text("## Rule 1: Test\n**Condition:** x\n", encoding="utf-8")
     assert resolve_rules_path(tmp_path) == rules

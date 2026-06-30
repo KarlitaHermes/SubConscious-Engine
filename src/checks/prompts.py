@@ -32,8 +32,8 @@ def build_maintenance_prompt(
     recent_deliveries: Optional[list[tuple[str, float]]] = None,
 ) -> str:
     """Build a maintenance nudge for Karla."""
-    task_list = vault_root / "Projects" / "ORCHESTRATOR" / "Tasks" / "maintenance-tasks.md"
-    report_dir = vault_root / "Projects" / "ORCHESTRATOR" / "Reports"
+    task_list = vault_root / "Projects" / "Maintenance" / "tasks.md"
+    report_dir = vault_root / "Projects" / "Maintenance" / "Reports"
     history = _recent_history_section(recent_deliveries)
     return (
         f"[SUBCONSCIOUS] System idle detected (no human activity for {threshold_minutes}+ minutes).\n\n"
@@ -57,8 +57,8 @@ def build_research_prompt(
     recent_deliveries: Optional[list[tuple[str, float]]] = None,
 ) -> str:
     """Build a research nudge when maintenance is not the scheduled idle action."""
-    task_list = vault_root / "Projects" / "ORCHESTRATOR" / "Tasks" / "web-research-tasks.md"
-    report_dir = vault_root / "Projects" / "ORCHESTRATOR" / "Reports"
+    task_list = vault_root / "Projects" / "Maintenance" / "web-research-tasks.md"
+    report_dir = vault_root / "Projects" / "Maintenance" / "Reports"
     dream_journal = vault_root / "Projects" / "Dream-Journal"
     history = _recent_history_section(recent_deliveries)
     return (

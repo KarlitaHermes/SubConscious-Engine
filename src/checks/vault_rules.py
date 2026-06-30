@@ -35,7 +35,7 @@ def resolve_rules_path(path: Path) -> Path:
     """Resolve vault root or direct rules.md path."""
     if path.is_file():
         return path
-    return path / "Projects" / "ORCHESTRATOR" / "rules.md"
+    return path / "Projects" / "Maintenance" / "rules.md"
 
 
 class VaultRulesEngine:
@@ -234,5 +234,5 @@ class VaultRulesEngine:
             f"Condition: {condition}\n"
             f"Action: {action}\n\n"
             f"Karla: evaluate this system rule and take the configured action. "
-            f"Log what you did in the orchestrator reports directory."
+            f"Log what you did in the Maintenance reports directory."
         )

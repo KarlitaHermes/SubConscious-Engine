@@ -22,11 +22,11 @@ DECISION_MARKERS = (
 def get_pending_decisions(vault_root: Path, since_timestamp: float = 0.0) -> list[str]:
     """Return short summaries of items needing Rev's decision.
 
-    Scans recent ORCHESTRATOR reports and the DREAM backlog for markers.
+    Scans recent Maintenance reports and the DREAM backlog for markers.
     Only includes files modified after ``since_timestamp``.
     """
     decisions: list[str] = []
-    reports_dir = vault_root / "Projects" / "ORCHESTRATOR" / "Reports"
+    reports_dir = vault_root / "Projects" / "Maintenance" / "Reports"
     dream_backlog = vault_root / "Projects" / "Dream-Journal" / "Backlog.md"
 
     if reports_dir.exists():

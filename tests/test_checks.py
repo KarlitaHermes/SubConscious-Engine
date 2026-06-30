@@ -14,7 +14,7 @@ from src.checks.prompts import (
 
 
 def test_get_pending_decisions_from_report(tmp_path: Path) -> None:
-    reports = tmp_path / "Projects" / "ORCHESTRATOR" / "Reports"
+    reports = tmp_path / "Projects" / "Maintenance" / "Reports"
     reports.mkdir(parents=True)
     report = reports / "test-report.md"
     report.write_text("Some text\n⚠️ Needs Rev to decide on vault merge\n", encoding="utf-8")
@@ -25,7 +25,7 @@ def test_get_pending_decisions_from_report(tmp_path: Path) -> None:
 
 
 def test_get_pending_decisions_skips_old_files(tmp_path: Path) -> None:
-    reports = tmp_path / "Projects" / "ORCHESTRATOR" / "Reports"
+    reports = tmp_path / "Projects" / "Maintenance" / "Reports"
     reports.mkdir(parents=True)
     report = reports / "old.md"
     report.write_text("⚠️ stale", encoding="utf-8")
@@ -43,7 +43,7 @@ def test_build_pending_decisions_prompt_none_when_empty(tmp_path: Path) -> None:
 
 
 def test_build_pending_decisions_prompt_with_items(tmp_path: Path) -> None:
-    reports = tmp_path / "Projects" / "ORCHESTRATOR" / "Reports"
+    reports = tmp_path / "Projects" / "Maintenance" / "Reports"
     reports.mkdir(parents=True)
     (reports / "r.md").write_text("ACTION REQUIRED: pick a color\n", encoding="utf-8")
 
@@ -56,7 +56,7 @@ def test_build_pending_decisions_prompt_with_items(tmp_path: Path) -> None:
 def test_build_maintenance_prompt_includes_task_path(tmp_path: Path) -> None:
     text = build_maintenance_prompt(tmp_path, threshold_minutes=30)
     assert "[SUBCONSCIOUS]" in text
-    assert "maintenance-tasks.md" in text
+    assert "Maintenance/tasks.md" in text
     assert "Actions: [execute_task, skip_all, defer]" in text
 
 

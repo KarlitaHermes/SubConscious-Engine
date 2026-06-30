@@ -36,7 +36,7 @@ def build_vault_context(
         except OSError:
             pass
 
-    reports_dir = vault_root / "Projects" / "ORCHESTRATOR" / "Reports"
+    reports_dir = vault_root / "Projects" / "Maintenance" / "Reports"
     if reports_dir.is_dir():
         try:
             ctx["report_count"] = sum(

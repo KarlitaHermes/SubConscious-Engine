@@ -95,6 +95,6 @@ See `CONFIG.md` for full configuration options.
 
 See `CODING_STANDARD.md` for detailed coding conventions.
 
-## Lessons Learned from Old Orchestrator
+## Lessons Learned from Legacy Automation
 
 See `LESSONS_LEARNED.md` for pitfalls to avoid.

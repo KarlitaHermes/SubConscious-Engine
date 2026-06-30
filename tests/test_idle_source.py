@@ -96,7 +96,7 @@ def test_next_idle_event_type_alternation(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_wake_emits_pending_decisions(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
-    reports = vault / "Projects" / "ORCHESTRATOR" / "Reports"
+    reports = vault / "Projects" / "Maintenance" / "Reports"
     reports.mkdir(parents=True)
     (reports / "wake.md").write_text("⚠️ needs decision from Rev\n", encoding="utf-8")
 

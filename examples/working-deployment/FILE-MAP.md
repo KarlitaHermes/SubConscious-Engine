@@ -21,7 +21,7 @@ Sanitized from a Hermes-generated dump. **Paths are as deployed on the reference
 |------|------|---------|
 | Engine config | `~/.hermes/subconscious-engine/config.yaml` | Live entry points, routing, idle |
 | Engine config backup | `~/.hermes/subconscious-engine/config.yaml.bak` | Manual backup |
-| Orchestrator replica | `~/.hermes/subconscious-engine/config-orchestrator-replica.yaml` | Alternate profile on disk |
+| Minimal profile | `~/.hermes/subconscious-engine/config-minimal.yaml` | Alternate profile on disk |
 | Engine state | `~/.hermes/subconscious-engine/state.yaml` | Cooldowns, acks, poll_seen, deliveries |
 | Test state | `~/.hermes/subconscious-engine/state.test.yaml` | pytest / manual test profile |
 | Event drop dir | `~/.hermes/subconscious-engine/events/` | File watcher input |

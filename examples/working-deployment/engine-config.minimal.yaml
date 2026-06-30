@@ -1,10 +1,9 @@
-# SubConscious Engine — orchestrator replica (minimal working example)
+# SubConscious Engine — minimal working example
 #
-# Mirrored from: ~/.hermes/subconscious-engine/config-orchestrator-replica.yaml
+# Mirrored from: ~/.hermes/subconscious-engine/config-minimal.yaml
 # Copy to:       ~/.hermes/subconscious-engine/config.yaml
 #
 # Idle + file drop + inbound HTTP only — no weather poll.
-# Matches original orchestrator behaviour before http_poll / Open-Meteo.
 
 gateway:
   url: http://127.0.0.1:8642

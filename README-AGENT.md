@@ -1157,7 +1157,7 @@ Otherwise `ack-engine.sh` reads `host`, `port`, and `api_key` from the first ena
 
 | Type | `cooldown_key` (typical) | Summary |
 |------|--------------------------|---------|
-| Maintenance | `idle_engine` | One due task from maintenance-tasks.md |
+| Maintenance | `idle_engine` | One due task from tasks.md |
 | Research | `idle_engine` | One research topic → Reports |
 | Pending decisions | `pending_decisions` | Wake nudge — classify decision items |
 | Weather (Open-Meteo) | `open-meteo:...` | Advisory; notify if urgent |

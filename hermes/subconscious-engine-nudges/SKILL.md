@@ -152,14 +152,14 @@ Summarize what you did. Do not paste the full ack footer unless debugging.
 **Prompt signals:**
 
 - `[SUBCONSCIOUS] System idle detected`
-- Task file path: `{vault}/Projects/ORCHESTRATOR/Tasks/maintenance-tasks.md`
-- Reports: `{vault}/Projects/ORCHESTRATOR/Reports`
+- Task file path: `{vault}/Projects/Maintenance/tasks.md`
+- Reports: `{vault}/Projects/Maintenance/Reports`
 
 **Your job:**
 
 1. `ack-engine.sh idle_engine in_progress`
 2. Spawn sub-agent:
-   - Read maintenance-tasks.md
+   - Read tasks.md
    - Check "Last done" / cooldown per task
    - Pick **one** due task; if none due → report "All tasks up to date" and stop
    - If due → execute, write report to Reports, update Last done in task file
@@ -177,7 +177,7 @@ Summarize what you did. Do not paste the full ack footer unless debugging.
 **Prompt signals:**
 
 - `[SUBCONSCIOUS] System idle detected` + "self-improvement research"
-- `{vault}/Projects/ORCHESTRATOR/Tasks/web-research-tasks.md`
+- `{vault}/Projects/Maintenance/web-research-tasks.md`
 - `{vault}/Projects/Dream-Journal`
 - Reports directory
 

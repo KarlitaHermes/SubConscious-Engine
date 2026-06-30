@@ -19,7 +19,7 @@ Procedures for `~/.hermes/subconscious-engine/config.yaml`: entry points, routin
 | File | Purpose |
 |------|---------|
 | `~/.hermes/subconscious-engine/config.yaml` | **Active** engine config |
-| `~/.hermes/subconscious-engine/config-orchestrator-replica.yaml` | Optional minimal profile (idle + file drop only) |
+| `~/.hermes/subconscious-engine/config-minimal.yaml` | Optional minimal profile (idle + file drop only) |
 | `examples/working-deployment/engine-config.production.yaml` | Production-shaped template in repo |
 
 `ack-engine.sh` reads `SUBCONSCIOUS_ENGINE_URL` from env, else parses the first enabled `http` entry point in `config.yaml`.

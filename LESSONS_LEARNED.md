@@ -1,4 +1,4 @@
-# SubConscious Engine — Lessons Learned from Old Orchestrator
+# SubConscious Engine — Lessons Learned from Legacy Automation
 
 ## Architecture Lessons
 
@@ -15,7 +15,7 @@
 **Solution:** The engine manages its own state file (`~/.hermes/subconscious-engine/state.yaml`). The gateway's DB is read-only (via REST API).
 
 ### 4. Keep the Engine Stateless Where Possible
-**Problem:** The old orchestrator had complex state management with decisions queues, goals trackers, etc.
+**Problem:** The previous subsystem had complex state management with decisions queues, goals trackers, etc.
 **Solution:** Minimal state — just cooldown timestamps and last trigger times. Store in a simple YAML file.
 
 ## Code Lessons
@@ -25,11 +25,11 @@
 **Solution:** Simple idle detection: check last user activity timestamp. If idle > threshold, trigger. One prompt type.
 
 ### 6. Don't Block the Main Loop
-**Problem:** The old orchestrator's main loop could block on long-running operations.
+**Problem:** The legacy daemon's main loop could block on long-running operations.
 **Solution:** All HTTP calls use async with timeouts. The main loop never blocks.
 
 ### 7. Don't Hardcode Platform-Specific Logic
-**Problem:** The old orchestrator had Telegram-specific code (TelegramSender, batcher, etc.).
+**Problem:** The legacy daemon had Telegram-specific code (TelegramSender, batcher, etc.).
 **Solution:** The engine is platform-agnostic. It injects via SubConscious Adapter, which routes to the correct platform. The engine doesn't know or care about Telegram/Discord/etc.
 
 ### 8. Don't Use Complex IPC Mechanisms
@@ -39,7 +39,7 @@
 ## Deployment Lessons
 
 ### 9. Use systemd for Service Management
-**Problem:** Running the orchestrator manually or via cron was unreliable.
+**Problem:** Running the legacy daemon manually or via cron was unreliable.
 **Solution:** Proper systemd unit file with `Restart=on-failure`, logging, and clean start/stop.
 
 ### 10. Keep Config Separate from Code
@@ -47,7 +47,7 @@
 **Solution:** Single `config.yaml` with all options. Example config shipped as `config.yaml.example`.
 
 ### 11. Don't Install in the Gateway's Directory
-**Problem:** The old orchestrator lived in `~/.hermes/orchestrator/` which is inside the gateway's home.
+**Problem:** The legacy automation lived inside the gateway home directory instead of its own tree.
 **Solution:** The engine lives in its own directory. The plugin is in `~/.hermes/plugins/subconscious-adapter/`. Clean separation.
 
 ## Testing Lessons

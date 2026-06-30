@@ -18,7 +18,7 @@ These files are **sanitized snapshots** of a real Hermes + SubConscious setup. T
 | File | Live path it mirrors | Safe to copy as-is? |
 |------|----------------------|---------------------|
 | `engine-config.production.yaml` | `~/.hermes/subconscious-engine/config.yaml` | **Edit** `vault_root` and cooldowns for your machine |
-| `engine-config.orchestrator-replica.yaml` | `~/.hermes/subconscious-engine/config-orchestrator-replica.yaml` | Idle + file drop only (no weather); good minimal start |
+| `engine-config.minimal.yaml` | `~/.hermes/subconscious-engine/config-minimal.yaml` | Idle + file drop only (no weather); good minimal start |
 | `state.example.yaml` | `~/.hermes/subconscious-engine/state.yaml` | **Do not copy** — engine creates this; read for field meanings |
 | `hermes-gateway.snippet.yaml` | `~/.hermes/config.yaml` (platforms + plugins) | Merge into your Hermes config |
 | `systemd-service.example` | `/etc/systemd/system/subconscious-engine.service` | Replace `WorkingDirectory` / `User` |
