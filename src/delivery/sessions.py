@@ -63,6 +63,17 @@ class SessionRegistry:
         sessions.sort(key=lambda s: s.started_at, reverse=True)
         return sessions
 
+    async def find_session_for_source(self, source: str) -> Optional[SessionInfo]:
+        """Return the newest session for a single source, or None."""
+        if source in SKIP_SOURCES:
+            if source == "cli":
+                logger.debug("Skipping CLI source (see TODO.md)")
+            return None
+        for session in await self.list_sessions():
+            if session.source == source:
+                return session
+        return None
+
     async def find_best_session(
         self,
         target_source: str,

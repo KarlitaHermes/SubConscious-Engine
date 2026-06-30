@@ -12,6 +12,42 @@ from tests.conftest import make_config, make_session
 
 
 @pytest.mark.asyncio
+async def test_handle_rejects_preferred_target_with_wrong_source(
+    tmp_path,
+    mock_registry: AsyncMock,
+    mock_delivery: AsyncMock,
+) -> None:
+    cli_session = make_session("sess_cli_1", source="cli")
+    tg_session = make_session("sess_tg_1", source="telegram")
+    mock_registry.get_session.return_value = cli_session
+    mock_registry.find_sessions_for_sources.return_value = [tg_session]
+    mock_delivery.inject_many.return_value = [
+        DeliveryResult(session_id="sess_tg_1", success=True),
+    ]
+
+    config = make_config(
+        tmp_path,
+        rules=[{"event_type": "*", "target_sources": ["telegram"], "max_targets": 1}],
+    )
+    router = Router(config, mock_registry, mock_delivery, _fresh_state(tmp_path))
+    event = Event(
+        text="maintenance prompt",
+        event_type="maintenance",
+        source=EventSourceKind.IDLE,
+        preferred_target="sess_cli_1",
+        preferred_source="cli",
+        cooldown_key="test_router_wrong_source",
+    )
+
+    results = await router.handle(event)
+    assert len(results) == 1
+    assert results[0].session_id == "sess_tg_1"
+    mock_registry.find_sessions_for_sources.assert_awaited_once()
+    call_args = mock_registry.find_sessions_for_sources.await_args
+    assert call_args.args[0] == ["telegram"]
+
+
+@pytest.mark.asyncio
 async def test_handle_delivers_to_preferred_target(
     tmp_path,
     mock_registry: AsyncMock,

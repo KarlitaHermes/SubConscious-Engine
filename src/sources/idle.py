@@ -76,11 +76,10 @@ class IdleEventSource:
             await asyncio.sleep(self._config.poll_interval_seconds)
 
     async def _evaluate(self, bus: EventBus) -> None:
-        session = await self._registry.find_best_session(
-            self._config.idle.target_source,
-            self._config.idle.fallback_sources,
-        )
+        target = self._config.idle.target_source
+        session = await self._registry.find_session_for_source(target)
         if session is None:
+            logger.debug("No %s session available for idle check", target)
             return
 
         last_activity = await get_last_human_activity(

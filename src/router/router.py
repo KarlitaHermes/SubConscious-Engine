@@ -36,6 +36,15 @@ class Router:
         self._state = state
         self._gate = notify_gate or NotifyGate(config)
 
+    def _allowed_sources(self, event: Event, rule: RouteRule) -> list[str]:
+        """Sources permitted for this event under the matched routing rule."""
+        sources = rule.target_sources or (
+            [event.preferred_source] if event.preferred_source else []
+        )
+        if not sources:
+            sources = [self._config.idle.target_source, *self._config.idle.fallback_sources]
+        return [s for s in sources if s not in SKIP_SOURCES]
+
     async def handle(self, event: Event) -> list[DeliveryResult]:
         """Route an event and deliver to resolved session(s)."""
         reason = self._gate.check(self._state, event)
@@ -89,24 +98,29 @@ class Router:
 
     async def _resolve_targets(self, event: Event, rule: RouteRule) -> list[SessionInfo]:
         """Resolve target sessions from explicit IDs, hints, and rules."""
+        allowed = self._allowed_sources(event, rule)
+
         if event.targets:
             sessions = await self._registry.get_sessions_by_ids(event.targets)
+            if not rule.broadcast:
+                sessions = [s for s in sessions if s.source in allowed]
             return sessions[: rule.max_targets] if not rule.broadcast else sessions
 
         if event.preferred_target:
             session = await self._registry.get_session(event.preferred_target)
             if session is not None:
-                return [session]
+                if session.source in allowed:
+                    return [session]
+                logger.warning(
+                    "Event %s preferred_target %s (source=%s) not in allowed %s — re-resolving",
+                    event.id,
+                    event.preferred_target,
+                    session.source,
+                    allowed,
+                )
 
-        sources = rule.target_sources or (
-            [event.preferred_source] if event.preferred_source else []
-        )
-        if not sources:
-            sources = [self._config.idle.target_source, *self._config.idle.fallback_sources]
-
-        sources = [s for s in sources if s not in SKIP_SOURCES]
         sessions = await self._registry.find_sessions_for_sources(
-            sources,
+            allowed,
             max_targets=rule.max_targets,
             broadcast=rule.broadcast,
         )

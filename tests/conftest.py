@@ -96,6 +96,7 @@ def mock_registry() -> AsyncMock:
     registry.get_sessions_by_ids.return_value = []
     registry.find_sessions_for_sources.return_value = []
     registry.find_best_session.return_value = None
+    registry.find_session_for_source.return_value = None
     registry.list_sessions.return_value = []
     return registry
 

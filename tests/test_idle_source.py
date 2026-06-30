@@ -16,6 +16,25 @@ from tests.conftest import make_config
 
 
 @pytest.mark.asyncio
+async def test_idle_skipped_when_no_target_source_session(tmp_path: Path) -> None:
+    config = make_config(tmp_path, idle_enabled=True, rules=default_routing_rules())
+    state = StateManager(tmp_path / "state.yaml")
+    registry = AsyncMock()
+    registry.find_session_for_source.return_value = None
+
+    bus = EventBus()
+    source = IdleEventSource(config, registry, state)
+
+    with patch("src.sources.idle.get_last_human_activity", return_value=None):
+        await source._evaluate(bus)
+
+    bus.close()
+    published = [e async for e in bus.consume()]
+    assert published == []
+    registry.find_session_for_source.assert_awaited_once_with("telegram")
+
+
+@pytest.mark.asyncio
 async def test_idle_skipped_when_task_in_progress(tmp_path: Path) -> None:
     config = make_config(
         tmp_path,
@@ -28,7 +47,7 @@ async def test_idle_skipped_when_task_in_progress(tmp_path: Path) -> None:
     session = MagicMock()
     session.id = "sess_1"
     session.source = "telegram"
-    registry.find_best_session.return_value = session
+    registry.find_session_for_source.return_value = session
 
     bus = EventBus()
     source = IdleEventSource(config, registry, state)
@@ -54,7 +73,7 @@ async def test_idle_alternates_maintenance_and_research(tmp_path: Path) -> None:
     session = MagicMock()
     session.id = "sess_1"
     session.source = "telegram"
-    registry.find_best_session.return_value = session
+    registry.find_session_for_source.return_value = session
 
     bus = EventBus()
     source = IdleEventSource(config, registry, state)
@@ -109,7 +128,7 @@ async def test_wake_emits_pending_decisions(tmp_path: Path) -> None:
     session = MagicMock()
     session.id = "sess_1"
     session.source = "telegram"
-    registry.find_best_session.return_value = session
+    registry.find_session_for_source.return_value = session
 
     import time
 
