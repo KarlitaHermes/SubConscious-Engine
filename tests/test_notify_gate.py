@@ -129,3 +129,27 @@ def test_should_fetch_poll_always_fetches_open_meteo(tmp_path: Path) -> None:
         ),
     )
     assert gate.should_fetch_poll(state, entry_point) is True
+
+
+def test_blocks_nudge_budget(tmp_path: Path) -> None:
+    import time as _time
+
+    state = StateManager(tmp_path / "state.yaml")
+    gate = _gate(tmp_path, rules=[{"event_type": "*"}])
+    # Record 6 successful deliveries (default budget) within the last hour
+    now = _time.time()
+    for i in range(6):
+        state.record_delivery(f"e{i}", "test", ["s1"], success=True, cooldown_key=f"k{i}")
+    # The 7th event should be blocked by nudge budget
+    assert gate.check(state, _event()) is SuppressReason.NUDGE_BUDGET
+
+
+def test_nudge_budget_zero_means_unlimited(tmp_path: Path) -> None:
+    import time as _time
+
+    state = StateManager(tmp_path / "state.yaml")
+    gate = _gate(tmp_path, rules=[{"event_type": "*"}], nudge_budget_per_hour=0)
+    for i in range(10):
+        state.record_delivery(f"e{i}", "test", ["s1"], success=True, cooldown_key=f"k{i}")
+    # Should still allow even after many nudges
+    assert gate.check(state, _event()) is None

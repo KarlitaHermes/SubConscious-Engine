@@ -21,6 +21,7 @@ idle:
   fallback_sources: ["cli"]  # CLI inject broken — see TODO.md
   vault_root: "~/Documents/Obsidian Vault"
   wake_grace_minutes: 10
+  nudge_budget_per_hour: 6  # Max successful nudges per hour (0 = unlimited)
 
 # Polling interval for idle entry point (seconds)
 poll_interval_seconds: 60

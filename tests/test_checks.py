@@ -57,6 +57,7 @@ def test_build_maintenance_prompt_includes_task_path(tmp_path: Path) -> None:
     text = build_maintenance_prompt(tmp_path, threshold_minutes=30)
     assert "[SUBCONSCIOUS]" in text
     assert "maintenance-tasks.md" in text
+    assert "Actions: [execute_task, skip_all, defer]" in text
 
 
 def test_build_research_prompt_includes_research_path(tmp_path: Path) -> None:

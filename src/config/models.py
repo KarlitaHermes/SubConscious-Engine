@@ -26,6 +26,7 @@ class IdleConfig:
     fallback_sources: list[str]
     vault_root: Path
     wake_grace_minutes: int = 10
+    nudge_budget_per_hour: int = 6
 
 
 @dataclass

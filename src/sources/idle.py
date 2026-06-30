@@ -115,11 +115,12 @@ class IdleEventSource:
 
         threshold = self._config.idle.threshold_minutes
         vault = self._config.idle.vault_root
+        recent = self._state.recent_deliveries()
 
         if event_type == "maintenance":
-            text = build_maintenance_prompt(vault, threshold)
+            text = build_maintenance_prompt(vault, threshold, recent_deliveries=recent)
         else:
-            text = build_research_prompt(vault, threshold)
+            text = build_research_prompt(vault, threshold, recent_deliveries=recent)
 
         count = self._state.record_idle_trigger()
         logger.info("Idle trigger #%d → %s", count, event_type)
@@ -175,6 +176,7 @@ class IdleEventSource:
             self._config.idle.vault_root,
             idle_minutes=self._config.idle.threshold_minutes,
             since_timestamp=self._state.last_decisions_nudge,
+            recent_deliveries=self._state.recent_deliveries(),
         )
         if prompt is None:
             return

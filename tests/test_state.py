@@ -136,3 +136,65 @@ def test_record_ack_in_progress_counts_as_activity(tmp_path: Path) -> None:
     state.record_ack("idle_engine", 60, status="done")
     assert state.is_task_in_progress("idle_engine") is False
     assert state.is_in_cooldown(60, key="idle_engine") is True
+
+
+def test_nudge_budget_window_counts_recent_deliveries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    base = 4_000_000.0
+    t = {"now": base}
+    monkeypatch.setattr(time, "time", lambda: t["now"])
+
+    state = StateManager(tmp_path / "state.yaml")
+    assert state.nudge_count_window(3600) == 0
+
+    # Record 3 successful deliveries
+    for i in range(3):
+        t["now"] = base + i * 60
+        state.record_delivery(f"e{i}", "test", ["s1"], success=True)
+
+    assert state.nudge_count_window(3600) == 3
+
+
+def test_nudge_budget_window_excludes_old_deliveries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    base = 4_000_000.0
+    t = {"now": base}
+    monkeypatch.setattr(time, "time", lambda: t["now"])
+
+    state = StateManager(tmp_path / "state.yaml")
+    # Record delivery 2 hours ago
+    t["now"] = base - 7200
+    state.record_delivery("e0", "test", ["s1"], success=True)
+
+    # Now
+    t["now"] = base
+    assert state.nudge_count_window(3600) == 0
+
+
+def test_nudge_budget_failed_delivery_not_counted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    base = 4_000_000.0
+    monkeypatch.setattr(time, "time", lambda: base)
+
+    state = StateManager(tmp_path / "state.yaml")
+    state.record_delivery("e0", "test", [], success=False)
+    assert state.nudge_count_window(3600) == 0
+
+
+def test_recent_deliveries_returns_type_and_minutes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    base = 4_000_000.0
+    t = {"now": base}
+    monkeypatch.setattr(time, "time", lambda: t["now"])
+
+    state = StateManager(tmp_path / "state.yaml")
+    # Record two deliveries 10 and 5 minutes ago
+    t["now"] = base - 600
+    state.record_delivery("e1", "maintenance", ["s1"], success=True)
+    t["now"] = base - 300
+    state.record_delivery("e2", "research", ["s1"], success=True)
+
+    t["now"] = base
+    recent = state.recent_deliveries(limit=5)
+    assert len(recent) == 2
+    # Most recent first
+    assert recent[0][0] == "research"
+    assert abs(recent[0][1] - 5.0) < 0.1
+    assert recent[1][0] == "maintenance"
+    assert abs(recent[1][1] - 10.0) < 0.1

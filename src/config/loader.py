@@ -78,6 +78,7 @@ def load_config(config_path: Optional[Path] = None) -> Config:
                 idle_raw.get("vault_root", "~/Documents/Obsidian Vault"),
             ),
             wake_grace_minutes=int(idle_raw.get("wake_grace_minutes", 10)),
+            nudge_budget_per_hour=int(idle_raw.get("nudge_budget_per_hour", 6)),
         ),
         logging=LoggingConfig(
             level=str(logging_raw.get("level", "INFO")),

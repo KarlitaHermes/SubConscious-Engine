@@ -22,6 +22,7 @@ class SuppressReason(str, Enum):
     POLL_SEEN = "poll_seen"
     IN_PROGRESS = "in_progress"
     COOLDOWN = "cooldown"
+    NUDGE_BUDGET = "nudge_budget"
 
 
 class NotifyGate:
@@ -59,6 +60,11 @@ class NotifyGate:
         cooldown_minutes = rule.cooldown_minutes or self._config.idle.cooldown_minutes
         if state.is_in_cooldown(cooldown_minutes, key=cooldown_key):
             return SuppressReason.COOLDOWN
+
+        # Nudge budget: global rate limit across all event sources
+        budget = self._config.idle.nudge_budget_per_hour
+        if budget > 0 and state.nudge_count_window(3600) >= budget:
+            return SuppressReason.NUDGE_BUDGET
 
         return None
 
@@ -104,6 +110,12 @@ class NotifyGate:
                 prefix,
                 event.event_type,
                 key,
+            )
+        elif reason is SuppressReason.NUDGE_BUDGET:
+            logger.debug(
+                "%sevent type=%s suppressed — nudge budget exceeded",
+                prefix,
+                event.event_type,
             )
         else:
             logger.debug(

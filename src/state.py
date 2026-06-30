@@ -32,6 +32,7 @@ class StateManager:
             "last_observed_activity": None,
             "cooldowns": {},
             "deliveries": [],
+            "nudge_timestamps": [],
         }
         self.load()
 
@@ -85,6 +86,12 @@ class StateManager:
             self._data["trigger_count"] = int(self._data.get("trigger_count", 0)) + 1
             cooldowns = self._data.setdefault("cooldowns", {})
             cooldowns[cooldown_key] = now
+            # Track for nudge budget
+            timestamps = self._data.setdefault("nudge_timestamps", [])
+            timestamps.append(now)
+            # Keep only last 24h
+            cutoff = now - 86400
+            self._data["nudge_timestamps"] = [t for t in timestamps if t > cutoff]
 
         deliveries = self._data.setdefault("deliveries", [])
         deliveries.append(
@@ -181,7 +188,7 @@ class StateManager:
 
     def is_poll_item_seen(self, entry_point_id: str, item_key: str) -> bool:
         """Return True if an outbound poll item was already published."""
-        seen = self._data.setdefault("poll_seen", {})
+        seen = self._data.get("poll_seen", {})
         entry = seen.get(entry_point_id, {})
         return item_key in entry
 
@@ -244,4 +251,41 @@ class StateManager:
             self._data["acks"] = acks[-50:]
         self.save()
         logger.info("Agent ack %s for cooldown_key=%s", normalized, cooldown_key)
+
+    # ------------------------------------------------------------------
+    # Nudge budget: rolling window of nudge timestamps
+    # ------------------------------------------------------------------
+
+    def nudge_count_window(self, window_seconds: int = 3600) -> int:
+        """Return the number of nudges delivered in the last *window_seconds*."""
+        cutoff = time.time() - window_seconds
+        timestamps = self._data.get("nudge_timestamps", [])
+        # Prune old entries
+        recent = [t for t in timestamps if t > cutoff]
+        return len(recent)
+
+    def record_nudge_in_window(self) -> None:
+        """Record a nudge delivery for budget tracking."""
+        now = time.time()
+        timestamps = self._data.setdefault("nudge_timestamps", [])
+        timestamps.append(now)
+        # Keep only last 24h of timestamps to avoid unbounded growth
+        cutoff = now - 86400
+        self._data["nudge_timestamps"] = [t for t in timestamps if t > cutoff]
+        self.save()
+
+    # ------------------------------------------------------------------
+    # Recent deliveries: context for prompt enrichment
+    # ------------------------------------------------------------------
+
+    def recent_deliveries(self, limit: int = 5) -> list[tuple[str, float]]:
+        """Return the last *limit* deliveries as (event_type, minutes_ago) tuples."""
+        deliveries = self._data.get("deliveries", [])
+        now = time.time()
+        result: list[tuple[str, float]] = []
+        for d in reversed(deliveries[-limit:]):
+            ts = d.get("timestamp", 0)
+            minutes_ago = max(0.0, (now - ts) / 60) if ts else 0.0
+            result.append((d.get("event_type", "unknown"), minutes_ago))
+        return result
 

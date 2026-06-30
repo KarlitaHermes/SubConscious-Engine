@@ -28,6 +28,7 @@ def make_config(
     cooldown_minutes: int = 60,
     *,
     idle_enabled: bool = False,
+    nudge_budget_per_hour: int = 6,
 ) -> Config:
     """Build a minimal Config for tests."""
     return Config(
@@ -40,6 +41,7 @@ def make_config(
             fallback_sources=["cli"],
             vault_root=tmp_path / "vault",
             wake_grace_minutes=10,
+            nudge_budget_per_hour=nudge_budget_per_hour,
         ),
         logging=LoggingConfig(
             level="INFO",
