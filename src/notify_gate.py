@@ -54,10 +54,12 @@ class NotifyGate:
                 return SuppressReason.POLL_SEEN
 
         cooldown_key = event.cooldown_key or event.event_type
-        if state.is_task_in_progress(cooldown_key):
+        cooldown_minutes = rule.cooldown_minutes or self._config.idle.cooldown_minutes
+        # Expire abandoned in_progress after one cooldown window (min 60m).
+        in_progress_timeout = max(60, cooldown_minutes)
+        if state.is_task_in_progress(cooldown_key, timeout_minutes=in_progress_timeout):
             return SuppressReason.IN_PROGRESS
 
-        cooldown_minutes = rule.cooldown_minutes or self._config.idle.cooldown_minutes
         if state.is_in_cooldown(cooldown_minutes, key=cooldown_key):
             return SuppressReason.COOLDOWN
 

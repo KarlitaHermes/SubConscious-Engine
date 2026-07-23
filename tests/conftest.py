@@ -78,6 +78,8 @@ def make_session(
     session_id: str = "sess_telegram_1",
     source: str = "telegram",
     started_at: float = 1000.0,
+    *,
+    active: bool = True,
 ) -> SessionInfo:
     return SessionInfo(
         id=session_id,
@@ -86,6 +88,7 @@ def make_session(
         title="Test Session",
         started_at=started_at,
         message_count=5,
+        active=active,
     )
 
 

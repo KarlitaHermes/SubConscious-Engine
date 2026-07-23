@@ -82,6 +82,9 @@ class IdleEventSource:
             logger.debug("No %s session available for idle check", target)
             return
 
+        # /new or resume: drop in_progress locks bound to the previous session
+        self._state.note_active_session(target, session.id)
+
         last_activity = await get_last_human_activity(
             self._config.gateway.url,
             self._config.gateway.api_key,

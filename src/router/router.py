@@ -61,6 +61,9 @@ class Router:
             logger.warning("No targets resolved for event %s type=%s", event.id, event.event_type)
             return []
 
+        for session in targets:
+            self._state.note_active_session(session.source, session.id)
+
         results = await self._delivery.inject_many(self._delivery_text(event), targets)
         success_count = sum(1 for r in results if r.success)
         self._state.record_delivery(
@@ -109,15 +112,34 @@ class Router:
         if event.preferred_target:
             session = await self._registry.get_session(event.preferred_target)
             if session is not None:
-                if session.source in allowed:
+                if session.source not in allowed:
+                    logger.warning(
+                        "Event %s preferred_target %s (source=%s) not in allowed %s — re-resolving",
+                        event.id,
+                        event.preferred_target,
+                        session.source,
+                        allowed,
+                    )
+                elif session.active:
                     return [session]
-                logger.warning(
-                    "Event %s preferred_target %s (source=%s) not in allowed %s — re-resolving",
-                    event.id,
-                    event.preferred_target,
-                    session.source,
-                    allowed,
-                )
+                else:
+                    # /new or resume moved the route; never pin a stale id
+                    resolved = await self._registry.find_session_for_source(session.source)
+                    if resolved is not None and resolved.source in allowed:
+                        if resolved.id != session.id:
+                            logger.info(
+                                "Event %s preferred_target %s is not the active route; using %s",
+                                event.id,
+                                session.id,
+                                resolved.id,
+                            )
+                        return [resolved]
+                    logger.warning(
+                        "Event %s preferred_target %s inactive and no active %s session — re-resolving",
+                        event.id,
+                        event.preferred_target,
+                        session.source,
+                    )
 
         sessions = await self._registry.find_sessions_for_sources(
             allowed,

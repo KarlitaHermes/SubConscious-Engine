@@ -80,6 +80,39 @@ async def test_handle_delivers_to_preferred_target(
 
 
 @pytest.mark.asyncio
+async def test_handle_replaces_inactive_preferred_target(
+    tmp_path,
+    mock_registry: AsyncMock,
+    mock_delivery: AsyncMock,
+) -> None:
+    stale = make_session("sess_old", started_at=1000.0, active=False)
+    active = make_session("sess_new", started_at=500.0, active=True)
+    mock_registry.get_session.return_value = stale
+    mock_registry.find_session_for_source.return_value = active
+    mock_delivery.inject_many.return_value = [
+        DeliveryResult(session_id="sess_new", success=True),
+    ]
+
+    config = make_config(
+        tmp_path,
+        rules=[{"event_type": "*", "target_sources": ["telegram"], "max_targets": 1}],
+    )
+    router = Router(config, mock_registry, mock_delivery, _fresh_state(tmp_path))
+    event = Event(
+        text="nudge",
+        event_type="maintenance",
+        source=EventSourceKind.IDLE,
+        preferred_target="sess_old",
+        cooldown_key="test_stale_preferred",
+    )
+
+    results = await router.handle(event)
+    assert results[0].session_id == "sess_new"
+    mock_registry.find_session_for_source.assert_awaited_once_with("telegram")
+    mock_registry.find_sessions_for_sources.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_handle_blocked_by_cooldown(
     tmp_path,
     mock_registry: AsyncMock,

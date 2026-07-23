@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 ACK_STATUS_IN_PROGRESS = "in_progress"
 ACK_STATUS_DONE = "done"
 ACK_TERMINAL_STATUSES = frozenset({ACK_STATUS_DONE, "completed"})
+# ponytail: unbounded in_progress after /new or gateway reboot; expire then upgrade to session-bound acks
+DEFAULT_IN_PROGRESS_TIMEOUT_MINUTES = 180
 
 
 class StateManager:
@@ -205,10 +207,62 @@ class StateManager:
         val = self._data.get("last_agent_handled")
         return float(val) if val is not None else None
 
-    def is_task_in_progress(self, cooldown_key: str) -> bool:
-        """Return True if Hermes reported this cooldown_key as in progress."""
+    def is_task_in_progress(
+        self,
+        cooldown_key: str,
+        *,
+        timeout_minutes: int | None = None,
+    ) -> bool:
+        """Return True if Hermes reported this cooldown_key as in progress.
+
+        Stale entries expire after *timeout_minutes* (default 180) so a killed
+        agent after /new or gateway reboot cannot block nudges forever.
+        """
         tasks = self._data.get("tasks_in_progress", {})
-        return cooldown_key in tasks
+        entry = tasks.get(cooldown_key)
+        if entry is None:
+            return False
+        timeout = (
+            DEFAULT_IN_PROGRESS_TIMEOUT_MINUTES
+            if timeout_minutes is None
+            else max(1, int(timeout_minutes))
+        )
+        since = float(entry.get("since") or 0.0)
+        if since and (time.time() - since) > timeout * 60:
+            tasks.pop(cooldown_key, None)
+            self.save()
+            logger.info(
+                "Cleared stale in_progress for %s (age > %dm)",
+                cooldown_key,
+                timeout,
+            )
+            return False
+        return True
+
+    def note_active_session(self, source: str, session_id: str) -> bool:
+        """Record the live session for *source*. Clear in_progress on change.
+
+        Returns True if the active session id changed (and tasks were cleared).
+        """
+        if not source or not session_id:
+            return False
+        active = self._data.setdefault("active_sessions", {})
+        previous = active.get(source)
+        if previous == session_id:
+            return False
+        active[source] = session_id
+        tasks = self._data.get("tasks_in_progress") or {}
+        if previous and tasks:
+            logger.info(
+                "Active %s session changed %s → %s; clearing %d in_progress task(s)",
+                source,
+                previous,
+                session_id,
+                len(tasks),
+            )
+            self._data["tasks_in_progress"] = {}
+        self.save()
+        return previous is not None and previous != session_id
 
     def record_ack(
         self,

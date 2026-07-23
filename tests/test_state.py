@@ -138,6 +138,38 @@ def test_record_ack_in_progress_counts_as_activity(tmp_path: Path) -> None:
     assert state.is_in_cooldown(60, key="idle_engine") is True
 
 
+def test_in_progress_expires_after_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = 5_000_000.0
+    t = {"now": base}
+    monkeypatch.setattr(time, "time", lambda: t["now"])
+
+    state = StateManager(tmp_path / "state.yaml")
+    state.record_ack("idle_engine", 60, status="in_progress")
+    assert state.is_task_in_progress("idle_engine", timeout_minutes=60) is True
+
+    t["now"] = base + 61 * 60
+    assert state.is_task_in_progress("idle_engine", timeout_minutes=60) is False
+    assert state.is_task_in_progress("idle_engine") is False
+
+
+def test_note_active_session_clears_in_progress_on_change(tmp_path: Path) -> None:
+    state = StateManager(tmp_path / "state.yaml")
+    state.record_ack("idle_engine", 60, status="in_progress")
+    state.note_active_session("telegram", "sess_old")
+    assert state.is_task_in_progress("idle_engine") is True
+
+    changed = state.note_active_session("telegram", "sess_new")
+    assert changed is True
+    assert state.is_task_in_progress("idle_engine") is False
+
+    # Same id is a no-op
+    state.record_ack("idle_engine", 60, status="in_progress")
+    assert state.note_active_session("telegram", "sess_new") is False
+    assert state.is_task_in_progress("idle_engine") is True
+
+
 def test_nudge_budget_window_counts_recent_deliveries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     base = 4_000_000.0
     t = {"now": base}

@@ -57,6 +57,28 @@ def test_blocks_in_progress(tmp_path: Path) -> None:
     assert gate.check(state, _event(cooldown_key="weather")) is SuppressReason.IN_PROGRESS
 
 
+def test_allows_after_stale_in_progress_expires(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import time
+
+    base = 6_000_000.0
+    t = {"now": base}
+    monkeypatch.setattr(time, "time", lambda: t["now"])
+
+    state = StateManager(tmp_path / "state.yaml")
+    state.record_ack("weather", 60, status="in_progress")
+    gate = _gate(
+        tmp_path,
+        rules=[{"event_type": "*", "cooldown_minutes": 60}],
+        cooldown_minutes=60,
+    )
+    assert gate.check(state, _event(cooldown_key="weather")) is SuppressReason.IN_PROGRESS
+
+    t["now"] = base + 61 * 60
+    assert gate.check(state, _event(cooldown_key="weather")) is None
+
+
 def test_blocks_poll_seen(tmp_path: Path) -> None:
     state = StateManager(tmp_path / "state.yaml")
     state.mark_poll_item_seen("weather_poll", "alert-1")
