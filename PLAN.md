@@ -86,7 +86,7 @@ SubConscious-Engine/
 
 ## Status
 
-**Shipped (v1 event router):** idle + maintenance/research alternation, pending-decisions wake nudge, file drop, inbound REST + ack, http_poll (including Open-Meteo), vault inbox/rules sources, routing rules, notify gate, nudge budget, queue delivery, **preferred_window** (soft schedule → park or ASAP).
+**Shipped (v1 event router):** idle + maintenance/research alternation, pending-decisions wake nudge, file drop, inbound REST + ack, http_poll (including Open-Meteo), vault inbox/rules sources, routing rules (**including `match.task_id` / `task`**), notify gate, nudge budget, queue delivery, **preferred_window** (soft schedule → park or ASAP).
 
 **Deferred:** CLI session inject (adapter Platform enum) — see `TODO.md`. Prefer `telegram` as `idle.target_source`.
 

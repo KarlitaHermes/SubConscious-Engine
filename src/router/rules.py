@@ -15,6 +15,7 @@ class RouteRule:
 
     event_type: str
     entry_point: Optional[str] = None
+    task_id: Optional[str] = None
     target_sources: list[str] = field(default_factory=list)
     broadcast: bool = False
     max_targets: int = 1
@@ -39,6 +40,15 @@ class RouteRule:
         return event_priority >= self.min_event_priority
 
 
+def _rule_task_id(item: dict[str, Any]) -> Optional[str]:
+    """Accept match.task_id or match.task (string); empty → None."""
+    raw = item.get("task_id", item.get("task"))
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    return text or None
+
+
 def parse_rules(raw: list[dict[str, Any]]) -> list[RouteRule]:
     """Parse routing rules from config YAML."""
     rules: list[RouteRule] = []
@@ -47,6 +57,7 @@ def parse_rules(raw: list[dict[str, Any]]) -> list[RouteRule]:
             RouteRule(
                 event_type=str(item.get("event_type", item.get("type", "*"))),
                 entry_point=item.get("entry_point"),
+                task_id=_rule_task_id(item),
                 target_sources=list(item.get("target_sources") or []),
                 broadcast=bool(item.get("broadcast", False)),
                 max_targets=int(item.get("max_targets", 1)),
@@ -67,9 +78,12 @@ def match_rule(
     event_priority: int = 0,
     entry_point: Optional[str] = None,
     now: Optional[datetime] = None,
+    task_id: Optional[str] = None,
 ) -> RouteRule:
     """Find the best matching rule for an event type and context."""
-    selected = select_rule(rules, event_type, event_priority, entry_point, now)
+    selected = select_rule(
+        rules, event_type, event_priority, entry_point, now, task_id=task_id,
+    )
     if selected is not None:
         return selected
     return RouteRule(event_type=event_type)
@@ -81,26 +95,37 @@ def select_rule(
     event_priority: int = 0,
     entry_point: Optional[str] = None,
     now: Optional[datetime] = None,
+    task_id: Optional[str] = None,
 ) -> Optional[RouteRule]:
-    """Select the highest-priority applicable rule, preferring exact type matches."""
-    candidates: list[tuple[int, int, RouteRule]] = []
+    """Select the best applicable rule.
+
+    Preference order (high → low): exact event_type over ``*``, task-specific
+    rule over a generic (no task_id) rule, then rule priority. A rule with
+    ``task_id`` only matches events carrying that same id.
+    """
+    event_task = (str(task_id).strip() if task_id is not None else "") or None
+    # (type_exact, task_exact, priority, rule)
+    candidates: list[tuple[int, int, int, RouteRule]] = []
     for rule in rules:
         if rule.event_type not in (event_type, "*"):
             continue
         if rule.entry_point and rule.entry_point != entry_point:
             continue
+        if rule.task_id and rule.task_id != event_task:
+            continue
         if not rule.accepts_event_priority(event_priority):
             continue
         if not rule.is_active_now(now):
             continue
-        exactness = 1 if rule.event_type == event_type else 0
-        candidates.append((rule.priority, exactness, rule))
+        type_exact = 1 if rule.event_type == event_type else 0
+        task_exact = 1 if rule.task_id else 0
+        candidates.append((type_exact, task_exact, rule.priority, rule))
 
     if not candidates:
         return None
 
-    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
-    return candidates[0][2]
+    candidates.sort(key=lambda item: (item[0], item[1], item[2]), reverse=True)
+    return candidates[0][3]
 
 
 def rule_applicable(
@@ -109,11 +134,15 @@ def rule_applicable(
     event_priority: int = 0,
     entry_point: Optional[str] = None,
     now: Optional[datetime] = None,
+    task_id: Optional[str] = None,
 ) -> bool:
     """Return True if a rule applies to the given event context."""
+    event_task = (str(task_id).strip() if task_id is not None else "") or None
     if rule.event_type not in (event_type, "*"):
         return False
     if rule.entry_point and rule.entry_point != entry_point:
+        return False
+    if rule.task_id and rule.task_id != event_task:
         return False
     if not rule.accepts_event_priority(event_priority):
         return False

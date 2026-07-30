@@ -71,7 +71,7 @@ Orchestration only — no business logic in `app.py`.
 
 Shared checks used at publish and/or deliver:
 
-- No matching routing rule (time / priority / entry point)
+- No matching routing rule (time / priority / entry point / task_id)
 - Poll item already seen
 - Task `in_progress` for cooldown key
 - Cooldown active
@@ -80,7 +80,8 @@ Shared checks used at publish and/or deliver:
 
 ### `router/` — Target resolution and delivery
 
-- Match routing rules (`rules.py`)
+- Match routing rules (`rules.py`) on `event_type`, optional `entry_point`, optional `task_id`/`task`
+- Prefer exact type over `*`, task-specific over generic, then higher rule priority
 - Resolve sessions via registry (explicit IDs → preferred → source match)
 - Skip `cron` / `subagent` / `api_server` sources
 - Append `[engine-ack:key|in_progress,done]` when `cooldown_key` is set
@@ -93,11 +94,11 @@ Shared checks used at publish and/or deliver:
 
 ### `state.py` — Persistence
 
-YAML under `state.file`: cooldowns, deliveries, acks, `tasks_in_progress`, poll/file dedupe, idle period flags, active session tracking, nudge timestamps, and **`deferred`** (preferred-window park queue). Atomic write via temp file + replace.
+YAML under `state.file`: cooldowns, deliveries, acks, `tasks_in_progress`, poll/file dedupe, idle period flags, active session tracking, nudge timestamps, and **`deferred`** (preferred-window park queue; preserves `task_id`). Atomic write via temp file + replace.
 
 ### `checks/` — Vault helpers and prompts
 
-Scan vault for decisions/inbox/rules; build maintenance / research / pending-decisions prompt text for the idle source.
+Scan vault for decisions/inbox/rules; build maintenance / research / pending-decisions prompt text for the idle source. `music_task.py` detects when daily music curation is due so idle can tag `task_id: music_curation`.
 
 ### `signals/session.py` — Activity
 

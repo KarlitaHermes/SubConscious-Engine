@@ -119,3 +119,19 @@ def test_normalize_routing_rule_match_deliver() -> None:
     assert normalized["event_type"] == "maintenance"
     assert normalized["entry_point"] == "idle"
     assert normalized["target_sources"] == ["telegram"]
+
+
+def test_normalize_routing_rule_task_id() -> None:
+    normalized = normalize_routing_rule(
+        {
+            "name": "idle-music-curation",
+            "match": {
+                "event_type": "maintenance",
+                "entry_point": "idle",
+                "task_id": "music_curation",
+            },
+            "deliver": {"priority": 5, "target_sources": ["telegram"]},
+        },
+    )
+    assert normalized["task_id"] == "music_curation"
+    assert normalized["priority"] == 5

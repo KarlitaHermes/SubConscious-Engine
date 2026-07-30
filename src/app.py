@@ -121,6 +121,7 @@ class App:
                 "event_type": str(item.get("event_type") or "custom"),
                 "source": source,
                 "entry_point": item.get("entry_point"),
+                "task_id": (str(item["task_id"]).strip() or None) if item.get("task_id") else None,
                 "preferred_target": item.get("preferred_target"),
                 "preferred_source": item.get("preferred_source"),
                 "priority": int(item.get("priority") or 0),

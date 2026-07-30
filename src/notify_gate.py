@@ -50,6 +50,7 @@ class NotifyGate:
             event.priority,
             event.entry_point,
             now=now,
+            task_id=event.task_id,
         )
         if rule is None:
             return SuppressReason.NO_RULE
@@ -219,6 +220,7 @@ class NotifyGate:
             event.priority,
             event.entry_point,
             now=now,
+            task_id=event.task_id,
         )
 
     def cooldown_key(self, event: Event) -> str:

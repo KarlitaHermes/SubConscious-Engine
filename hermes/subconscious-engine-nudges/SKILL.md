@@ -24,12 +24,13 @@ Hermes should pull or sync the **subconscious-engine** repo, then install this s
 cd /home/hermes/workspace/subconscious-engine
 git pull
 
-# Install skill symlink into Hermes skills directory
-chmod +x hermes/install-skill.sh hermes/subconscious-engine-nudges/scripts/ack-engine.sh
+# Copy skills into Hermes skills directory (not symlinks — Hermes rejects out-of-tree links)
+chmod +x hermes/install-skill.sh
 ./hermes/install-skill.sh
+# Then /reload-skills or restart hermes-gateway
 ```
 
-Installed location: `~/.hermes/skills/devops/subconscious-engine-nudges` → repo `hermes/subconscious-engine-nudges/`.
+Installed location: `~/.hermes/skills/devops/subconscious-engine-nudges` (copied from repo `hermes/subconscious-engine-nudges/`).
 
 **Optional env** in `~/.hermes/.env` (overrides config discovery):
 
@@ -145,11 +146,13 @@ Summarize what you did. Do not paste the full ack footer unless debugging.
 
 ## 5. Nudge types — what to do for each
 
-### 5.1 Maintenance (`event_type: maintenance`, `cooldown_key: idle_engine`)
+### 5.1 Maintenance (`event_type: maintenance`, `cooldown_key: idle_engine` or `idle_engine:<task_id>`)
 
 **When:** User idle ≥ threshold (default 30 min). Odd idle triggers alternate maintenance/research; maintenance is the odd cycles.
 
-If the engine config sets `preferred_window` on the maintenance rule, the inject may wait for those hours (or arrive ASAP if the slot was missed). You only see the message when it is actually injected — then ack as usual.
+If daily music curation is due, idle tags `task_id: music_curation` and uses cooldown key `idle_engine:music_curation`. That matches the `idle-music-curation` routing rule (`match.task_id`), which may apply `preferred_window` (park overnight or ASAP). Untagged maintenance uses the generic rule and `idle_engine`.
+
+If the matched rule sets `preferred_window`, the inject may wait for those hours (or arrive ASAP if the slot was missed). You only see the message when it is actually injected — then ack as usual using the footer key (`idle_engine` or `idle_engine:music_curation`).
 
 **Prompt signals:**
 
@@ -159,13 +162,14 @@ If the engine config sets `preferred_window` on the maintenance rule, the inject
 
 **Your job:**
 
-1. `ack-engine.sh idle_engine in_progress`
+1. `ack-engine.sh <cooldown_key_from_footer> in_progress`
 2. Spawn sub-agent:
    - Read tasks.md
    - Check "Last done" / cooldown per task
    - Pick **one** due task; if none due → report "All tasks up to date" and stop
    - If due → execute, write report to Reports, update Last done in task file
-3. `ack-engine.sh idle_engine done --minutes 60 --reset-idle`
+   - For music curation: run the daily music pipeline (`~/projects/karla-music/daily.py` / skill)
+3. `ack-engine.sh <cooldown_key_from_footer> done --minutes 60 --reset-idle`
 4. Brief summary to User
 
 **Do not** run kernel upgrades, Proxmox upgrades, or destructive ops without User's explicit approval.

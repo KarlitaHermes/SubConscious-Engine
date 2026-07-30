@@ -55,6 +55,56 @@ def test_parse_rules_preferred_window() -> None:
     assert rules[0].preferred_window.max_wait_hours == 10.0
 
 
+def test_parse_rules_task_id_aliases() -> None:
+    by_id = parse_rules([{"event_type": "maintenance", "task_id": "music_curation"}])
+    by_task = parse_rules([{"event_type": "maintenance", "task": "music_curation"}])
+    assert by_id[0].task_id == "music_curation"
+    assert by_task[0].task_id == "music_curation"
+
+
+def test_select_rule_task_id_beats_generic_even_at_lower_priority() -> None:
+    rules = [
+        RouteRule(
+            event_type="maintenance",
+            entry_point="idle",
+            target_sources=["telegram"],
+            priority=10,
+        ),
+        RouteRule(
+            event_type="maintenance",
+            entry_point="idle",
+            task_id="music_curation",
+            target_sources=["telegram"],
+            priority=5,
+        ),
+    ]
+    selected = select_rule(
+        rules, "maintenance", entry_point="idle", task_id="music_curation",
+    )
+    assert selected is not None
+    assert selected.task_id == "music_curation"
+    assert selected.priority == 5
+
+    generic = select_rule(rules, "maintenance", entry_point="idle")
+    assert generic is not None
+    assert generic.task_id is None
+    assert generic.priority == 10
+
+
+def test_select_rule_task_id_required_on_rule() -> None:
+    rules = [
+        RouteRule(
+            event_type="maintenance",
+            task_id="music_curation",
+            target_sources=["telegram"],
+            priority=50,
+        ),
+        RouteRule(event_type="maintenance", target_sources=["cli"], priority=1),
+    ]
+    assert select_rule(rules, "maintenance", task_id="other").target_sources == ["cli"]
+    assert select_rule(rules, "maintenance").target_sources == ["cli"]
+
+
 def test_match_rule_exact() -> None:
     rules = [
         RouteRule(event_type="maintenance", target_sources=["telegram"], priority=10),

@@ -24,7 +24,7 @@ If you are **Hermes** (the Agent receiving injected messages), you also need the
 | Step | Action |
 |------|--------|
 | 1 | Pull this repo (`git pull`) |
-| 2 | Run `./hermes/install-skill.sh` to link skills into `~/.hermes/skills/` (nudges, config, inbox-digest-curator, kanban-se-bridge) |
+| 2 | Run `./hermes/install-skill.sh` to **copy** skills into `~/.hermes/skills/` (nudges, config, inbox-digest-curator, kanban-se-bridge), then `/reload-skills` or restart gateway |
 | 3 | Ensure the engine is running with `POST /ack` support (restart after sync) |
 | 4 | On every subconscious injection: read `hermes/subconscious-engine-nudges/SKILL.md` and use `scripts/ack-engine.sh` |
 
@@ -325,6 +325,7 @@ routing:
       match:
         event_type: maintenance
         entry_point: idle       # optional — omit to match any entry point
+        task_id: music_curation # optional — also accepts `task:`; omit for any task
         min_event_priority: 0   # optional
       deliver:
         target_sources: ["telegram"]
@@ -344,6 +345,7 @@ routing:
 |---------------|---------|
 | `event_type` | Event type string, or `"*"` for any |
 | `entry_point` | Only match events from this entry point `id` |
+| `task_id` / `task` | Only match events carrying this task id (see below) |
 | `min_event_priority` | Event `priority` must be >= this value |
 
 | `deliver` field | Meaning |
@@ -351,10 +353,36 @@ routing:
 | `target_sources` | Session sources to inject into (e.g. `telegram`) |
 | `max_targets` | Max sessions to inject (unless `broadcast: true`) |
 | `cooldown_minutes` | Per-event cooldown before same type fires again |
-| `priority` | Higher wins when multiple rules match |
+| `priority` | Tie-break after specificity (see selection order) |
 | `broadcast` | If true, inject to all matching sessions |
 | `active_hours` / `active_days` | Hard gate: outside window → drop (no defer) |
 | `preferred_window` | Soft schedule: wait for listed hours if soon, else ASAP (see below) |
+
+#### Task id matching
+
+Use a separate rule when one `event_type` should behave differently for a specific task (e.g. overnight music vs generic maintenance):
+
+```yaml
+- name: idle-music-curation
+  match:
+    event_type: maintenance
+    entry_point: idle
+    task_id: music_curation   # or task: music_curation
+  deliver:
+    priority: 5
+    cooldown_minutes: 1440
+    preferred_window:
+      hours: [0, 1, 2, 3, 4, 5]
+      max_wait_hours: 12
+      fallback: asap
+    target_sources: [telegram]
+```
+
+Events carry the id via top-level `task_id` / `task`, or `metadata.task_id` / `metadata.task` on inbound JSON/file drops.
+
+**Selection order** (high → low): exact `event_type` over `*`, then task-specific rule over a generic rule (no `task_id`), then higher `deliver.priority`. So a `task_id: music_curation` rule at priority 5 beats a generic `maintenance` rule at priority 10 when the event is tagged.
+
+**Idle auto-tag:** when daily music curation is due (`tasks.md` / `~/.hermes/.daily_music_done`), the idle source sets `task_id: music_curation` and cooldown key `idle_engine:music_curation` so the music rule (and its `preferred_window`) can match. Otherwise idle maintenance stays untagged and hits the generic rule.
 
 #### Preferred window (soft schedule)
 
@@ -1142,7 +1170,7 @@ This repository ships a **Hermes skill** so the Agent knows how to handle every 
 
 ```
 hermes/
-├── install-skill.sh                          # Symlink skill into ~/.hermes/skills/
+├── install-skill.sh                          # Copy skills into ~/.hermes/skills/
 └── subconscious-engine-nudges/
     ├── SKILL.md                              # Complete nudge + ack procedures
     └── scripts/

@@ -115,6 +115,7 @@ def normalize_routing_rule(item: dict[str, Any]) -> dict[str, Any]:
         "name": item.get("name"),
         "event_type": match.get("event_type", match.get("type", "*")),
         "entry_point": match.get("entry_point"),
+        "task_id": match.get("task_id", match.get("task")),
         "min_event_priority": match.get("min_event_priority", 0),
         **deliver,
     }

@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 # Install or refresh Hermes skills from this repository.
 #
+# Hermes trusts real files under ~/.hermes/skills/. Symlinks into a git
+# checkout resolve outside that tree and are rejected — so we copy.
+#
 # Usage:
 #   ./hermes/install-skill.sh
 #
-# Installs:
+# Installs (copies):
 #   ~/.hermes/skills/devops/subconscious-engine-nudges
 #   ~/.hermes/skills/devops/subconscious-engine-config
 #   ~/.hermes/skills/productivity/inbox-digest-curator
 #   ~/.hermes/skills/productivity/kanban-se-bridge
 #
-# Legacy symlink (older paths):
-#   ~/.hermes/skills/subconscious-engine-nudges -> devops/subconscious-engine-nudges
+# Legacy path (also a real copy):
+#   ~/.hermes/skills/subconscious-engine-nudges
 
 set -euo pipefail
 
@@ -30,30 +33,39 @@ install_skill() {
   fi
 
   mkdir -p "$(dirname "$target")"
-  ln -sfn "$source" "$target"
-  echo "  $target -> $source"
+  # Drop prior symlink or mixed dir (nested symlink leftovers from old installer)
+  rm -rf "$target"
+  mkdir -p "$target"
+  cp -a "$source"/. "$target"/
+  # Ensure helpers are executable in the install tree
+  if [[ -f "$target/scripts/ack-engine.sh" ]]; then
+    chmod +x "$target/scripts/ack-engine.sh"
+  fi
+  echo "  $target (copied)"
 }
 
-echo "Installing SubConscious Hermes skills..."
+echo "Installing SubConscious Hermes skills (copy, not symlink)..."
 install_skill devops subconscious-engine-nudges
 install_skill devops subconscious-engine-config
 install_skill productivity inbox-digest-curator
 install_skill productivity kanban-se-bridge
 
-if [[ -x "$REPO_ROOT/hermes/subconscious-engine-nudges/scripts/ack-engine.sh" ]]; then
-  chmod +x "$REPO_ROOT/hermes/subconscious-engine-nudges/scripts/ack-engine.sh"
+# Legacy path used by some sessions — real copy so trust resolves under skills root
+legacy="$SKILLS_ROOT/subconscious-engine-nudges"
+rm -rf "$legacy"
+mkdir -p "$legacy"
+cp -a "$REPO_ROOT/hermes/subconscious-engine-nudges"/. "$legacy"/
+if [[ -f "$legacy/scripts/ack-engine.sh" ]]; then
+  chmod +x "$legacy/scripts/ack-engine.sh"
 fi
-
-# Legacy path used by some sessions
-mkdir -p "$SKILLS_ROOT"
-ln -sfn "$SKILLS_ROOT/devops/subconscious-engine-nudges" \
-  "$SKILLS_ROOT/subconscious-engine-nudges"
+echo "  $legacy (copied, legacy path)"
 
 echo ""
-echo "Done. Optional ~/.hermes/.env:"
+echo "Done. Reload skills in Hermes (/reload-skills) or restart hermes-gateway."
+echo "Optional ~/.hermes/.env:"
 echo "  SUBCONSCIOUS_ENGINE_URL=http://127.0.0.1:8770"
 echo ""
 echo "Cron + inbox howto: docs/CRON-AND-INBOX.md"
 echo "Kanban → SE return: docs/KANBAN-AND-SE.md"
 echo "Test ack:"
-echo "  $REPO_ROOT/hermes/subconscious-engine-nudges/scripts/ack-engine.sh idle_engine in_progress"
+echo "  $SKILLS_ROOT/devops/subconscious-engine-nudges/scripts/ack-engine.sh idle_engine in_progress"

@@ -98,6 +98,7 @@ class Router:
             text=event.text,
             source=event.source.value if hasattr(event.source, "value") else str(event.source),
             entry_point=event.entry_point,
+            task_id=event.task_id,
             priority=event.priority,
             preferred_target=event.preferred_target,
             preferred_source=event.preferred_source,

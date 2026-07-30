@@ -362,6 +362,7 @@ class StateManager:
         preferred_hours: list[int],
         metadata: Optional[dict[str, Any]] = None,
         event_id: Optional[str] = None,
+        task_id: Optional[str] = None,
     ) -> None:
         """Park an event until preferred window opens or prefer_until (ASAP)."""
         deferred = self._data.setdefault("deferred", {})
@@ -371,6 +372,7 @@ class StateManager:
             "text": text,
             "source": source,
             "entry_point": entry_point,
+            "task_id": task_id,
             "priority": priority,
             "preferred_target": preferred_target,
             "preferred_source": preferred_source,

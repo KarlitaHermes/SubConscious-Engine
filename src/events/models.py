@@ -30,6 +30,7 @@ class Event:
     event_type: str
     source: EventSourceKind
     entry_point: Optional[str] = None
+    task_id: Optional[str] = None
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
     preferred_target: Optional[str] = None
     preferred_source: Optional[str] = None
@@ -42,18 +43,22 @@ class Event:
     @classmethod
     def from_dict(cls, data: dict[str, Any], source: EventSourceKind) -> Event:
         """Build an event from a JSON/YAML payload."""
+        meta = dict(data.get("metadata") or {})
+        task_raw = data.get("task_id", data.get("task", meta.get("task_id", meta.get("task"))))
+        task_id = str(task_raw).strip() if task_raw is not None else ""
         return cls(
             text=str(data.get("text", "")),
             event_type=str(data.get("event_type", data.get("type", "custom"))),
             source=source,
             entry_point=data.get("entry_point"),
+            task_id=task_id or None,
             id=str(data.get("id", uuid.uuid4().hex)),
             preferred_target=data.get("preferred_target"),
             preferred_source=data.get("preferred_source"),
             targets=list(data.get("targets") or []),
             priority=int(data.get("priority", 0)),
             cooldown_key=data.get("cooldown_key"),
-            metadata=dict(data.get("metadata") or {}),
+            metadata=meta,
             created_at=float(data.get("created_at", time.time())),
         )
 

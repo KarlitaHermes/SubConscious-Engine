@@ -12,6 +12,7 @@ from src.checks.prompts import (
     build_pending_decisions_prompt,
     build_research_prompt,
 )
+from src.checks.music_task import resolve_maintenance_task_id
 from src.config import Config
 from src.delivery.sessions import SessionRegistry
 from src.events.bus import EventBus
@@ -103,12 +104,20 @@ class IdleEventSource:
             return
 
         event_type = self._state.next_idle_event_type()
+        task_id = None
+        cooldown_key = IDLE_COOLDOWN_KEY
+        if event_type == "maintenance":
+            task_id = resolve_maintenance_task_id(self._config.idle.vault_root)
+            if task_id:
+                cooldown_key = f"{IDLE_COOLDOWN_KEY}:{task_id}"
+
         probe = Event(
             text="",
             event_type=event_type,
             source=EventSourceKind.IDLE,
             entry_point=self._entry_point_id,
-            cooldown_key=IDLE_COOLDOWN_KEY,
+            task_id=task_id,
+            cooldown_key=cooldown_key,
         )
         reason = self._gate.check(self._state, probe)
         if self._gate.blocks_publish(reason):
@@ -126,19 +135,26 @@ class IdleEventSource:
             text = build_research_prompt(vault, threshold, recent_deliveries=recent)
 
         count = self._state.record_idle_trigger()
-        logger.info("Idle trigger #%d → %s", count, event_type)
+        logger.info(
+            "Idle trigger #%d → %s%s",
+            count,
+            event_type,
+            f" task_id={task_id}" if task_id else "",
+        )
 
         event = Event(
             text=text,
             event_type=event_type,
             source=EventSourceKind.IDLE,
             entry_point=self._entry_point_id,
+            task_id=task_id,
             preferred_target=session.id,
             preferred_source=session.source,
-            cooldown_key=IDLE_COOLDOWN_KEY,
+            cooldown_key=cooldown_key,
             metadata={
                 "idle_minutes": self._idle_minutes(effective_activity),
                 "idle_trigger_count": count,
+                **({"task_id": task_id} if task_id else {}),
             },
         )
         await bus.publish(event)

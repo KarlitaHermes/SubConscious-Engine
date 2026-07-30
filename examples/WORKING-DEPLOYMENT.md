@@ -84,11 +84,12 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now subconscious-engine
 ```
 
-**5. Skills** — install from this repo:
+**5. Skills** — copy from this repo into `~/.hermes/skills/` (Hermes rejects symlinks into the checkout):
 
 ```bash
 chmod +x hermes/install-skill.sh
 ./hermes/install-skill.sh
+# Then /reload-skills or: sudo systemctl restart hermes-gateway
 ```
 
 | Skill | Purpose |

@@ -92,7 +92,7 @@ Endpoints: `GET /health`, `POST /events`, `POST /ack`.
 
 No extra fields required. Uses top-level `idle:` and `poll_interval_seconds`.
 
-Emits `maintenance` / `research` (alternating) and `pending_decisions` when vault decisions warrant a wake nudge. Shared cooldown key for idle work: `idle_engine`.
+Emits `maintenance` / `research` (alternating) and `pending_decisions` when vault decisions warrant a wake nudge. Shared cooldown key for idle work: `idle_engine`. When daily music curation is due, maintenance events are tagged `task_id: music_curation` with cooldown `idle_engine:music_curation` so task-specific routing rules can match.
 
 ## Routing rules
 
@@ -105,6 +105,7 @@ routing:
       match:
         event_type: maintenance   # or "*"
         entry_point: idle         # optional filter
+        task_id: music_curation   # optional; also accepts `task:`
         min_event_priority: 0
       deliver:
         target_sources: ["telegram"]
@@ -120,9 +121,11 @@ routing:
           fallback: asap
 ```
 
+`task_id` / `task` on `match` restricts the rule to events carrying that id (top-level field, or `metadata.task_id` / `metadata.task` on inbound JSON). A task-specific rule beats a generic same-`event_type` rule even at lower priority. Idle maintenance sets `task_id: music_curation` automatically when daily music curation is due.
+
 `preferred_window` parks until the next matching hours when that start is within `max_wait_hours`; otherwise delivers immediately. If still undelivered when the window ends, a 60s flush promotes with ASAP. Distinct from `active_hours` (hard drop).
 
-Flat `event_type` / `target_sources` form still works. Highest matching rule priority wins; exact `event_type` beats `*` at the same priority.
+Flat `event_type` / `target_sources` form still works. Selection prefers exact `event_type` over `*`, then task-specific over generic, then higher `priority`.
 
 If no rule matches (including outside active hours/days), the event is suppressed.
 

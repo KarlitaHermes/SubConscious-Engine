@@ -83,7 +83,22 @@ routing:
         target_sources: [telegram]
         max_targets: 1
         priority: 30
+    - name: idle-music-curation
+      match:
+        event_type: maintenance
+        entry_point: idle
+        task_id: music_curation   # or task: — optional filter
+      deliver:
+        target_sources: [telegram]
+        priority: 5
+        cooldown_minutes: 1440
+        preferred_window:
+          hours: [0, 1, 2, 3, 4, 5]
+          max_wait_hours: 12
+          fallback: asap
 ```
+
+`match.task_id` / `match.task` restricts the rule to events with that id. Task-specific rules beat generic same-type rules even at lower priority. Idle auto-tags `music_curation` when that daily task is due. Details: `CONFIG.md`, `README-AGENT.md` §5.6.
 
 Cooldowns are per rule (`deliver.cooldown_minutes`) and per ack key (`cooldown_key` on events).
 
@@ -124,19 +139,28 @@ Do **not** edit `state.yaml` by hand — cooldowns, `tasks_in_progress`, `poll_s
 - Increase `idle.cooldown_minutes` and per-rule `cooldown_minutes` (maintenance/research)
 - Hermes must ack `idle_engine` / `pending_decisions` — see nudges skill
 - Notify gate blocks re-fire while `in_progress`
-- Optional: `preferred_window` on maintenance so overnight work waits for night (or ASAP if the slot is missed)
+- Optional: `preferred_window` on a **task-specific** rule (e.g. `match.task_id: music_curation`) so overnight work waits for night (or ASAP if the slot is missed). Generic `idle-maintenance` stays for untagged maintenance.
 
-### Prefer overnight maintenance
+### Prefer overnight music curation
 
 ```yaml
-# under routing.rules → maintenance → deliver:
-preferred_window:
-  hours: [0, 1, 2]
-  max_wait_hours: 12
-  fallback: asap
+# routing.rules — separate from generic idle-maintenance:
+- name: idle-music-curation
+  match:
+    event_type: maintenance
+    entry_point: idle
+    task_id: music_curation
+  deliver:
+    priority: 5
+    cooldown_minutes: 1440
+    preferred_window:
+      hours: [0, 1, 2, 3, 4, 5]
+      max_wait_hours: 12
+      fallback: asap
+    target_sources: [telegram]
 ```
 
-Restart engine after edit. See `CONFIG.md`.
+Idle sets `task_id: music_curation` when that task is due. Restart engine after edit. See `CONFIG.md`.
 
 ### Enable weather poll
 
