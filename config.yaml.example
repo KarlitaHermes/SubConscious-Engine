@@ -210,3 +210,15 @@ logging:
 # State file
 state:
   file: "~/.hermes/subconscious-engine/state.yaml"
+
+# Optional Hermes Kanban CLI client (subprocess only — never opens kanban.db).
+# Disabled by default; existing inject/idle/inbox paths are unchanged.
+# See docs/PLAN-KANBAN-SE.md and docs/CRON-AND-INBOX.md (kanban-report-*).
+kanban:
+  enabled: false
+  hermes_bin: "hermes"
+  board: ""                 # empty = default board
+  default_assignee: ""
+  timeout_seconds: 60
+  notify_platform: ""       # e.g. telegram (optional OOB ping)
+  notify_chat_id: ""        # Telegram chat_id, NOT Hermes session_id

@@ -23,13 +23,14 @@ STANDING_FILENAMES = frozenset(
 )
 
 SKIP_PREFIXES = ("dream-task-", "researcher-task-", "quick-wins-")
-NOTIFY_PREFIXES = ("news-digest-", "research-digest-", "dream-session-")
+NOTIFY_PREFIXES = ("news-digest-", "research-digest-", "dream-session-", "kanban-report-")
 EMAIL_PREFIXES = ("email-",)
 
 VAULT_DEST_BY_PREFIX: tuple[tuple[str, str], ...] = (
     ("news-digest-", "Projects/News-Digests"),
     ("dream-session-", "Projects/Dream-Journal"),
     ("research-digest-", "Projects/Research"),
+    ("kanban-report-", "Projects/Inbox-Processed"),
     ("knowledge-graph-", "Technical"),
     ("memory-optimization-", "Technical"),
     ("memory-audit-", "Technical"),

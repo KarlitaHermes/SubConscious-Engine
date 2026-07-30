@@ -78,6 +78,7 @@ The engine assigns **disposition** from filename prefix (see `src/checks/inbox.p
 | `news-digest-` | notify | `inbox_notify` | Delegate curation → notify User |
 | `research-digest-` | notify | `inbox_notify` | Delegate curation → notify User |
 | `dream-session-` | notify | `inbox_notify` | Summarize ideas |
+| `kanban-report-` | notify | `inbox_notify` | Kanban worker result → session context (see below) |
 | `email-` | delegate | `inbox_item` | **Main session** — security-sensitive |
 | `memory-`, `knowledge-graph-` | delegate | `inbox_item` | File to vault, brief OK |
 | YAML frontmatter `priority: high` | notify | `inbox_notify` | Always notify |
@@ -91,8 +92,35 @@ The engine assigns **disposition** from filename prefix (see `src/checks/inbox.p
 | `news-digest-` | `Projects/News-Digests/` |
 | `research-digest-` | `Projects/Research/` |
 | `dream-session-` | `Projects/Dream-Journal/` |
+| `kanban-report-` | `Projects/Inbox-Processed/` |
 | `knowledge-graph-`, `memory-*` | `Technical/` |
 | default | `Projects/Inbox-Processed/` |
+
+### Kanban worker reports (`kanban-report-`)
+
+When a Hermes Kanban worker finishes work triggered by SE, it should write markdown to `COMMS/Inbox/`:
+
+```
+kanban-report-<task_id>-YYYY-MM-DD.md
+```
+
+Suggested frontmatter + body:
+
+```markdown
+---
+source: kanban
+task_id: t_example
+priority: high
+---
+# Kanban report: <title>
+
+<summary of what was done>
+
+## Details
+...
+```
+
+SE inbox watcher picks it up and **injects into the Telegram session** (existing path) so Hermes keeps context. Optional Kanban OOB `notify-subscribe` is separate and does not replace this.
 
 ---
 

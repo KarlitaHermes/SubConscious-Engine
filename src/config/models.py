@@ -19,6 +19,20 @@ class AdapterConfig:
 
 
 @dataclass
+class KanbanConfig:
+    """Optional Hermes Kanban CLI integration (subprocess only)."""
+
+    enabled: bool = False
+    hermes_bin: str = "hermes"
+    board: str = ""
+    default_assignee: str = ""
+    timeout_seconds: float = 60.0
+    # Optional OOB notify target (Telegram chat_id — not Hermes session id)
+    notify_platform: str = ""
+    notify_chat_id: str = ""
+
+
+@dataclass
 class IdleConfig:
     threshold_minutes: int
     cooldown_minutes: int
@@ -91,6 +105,7 @@ class Config:
     entry_points: list[EntryPoint]
     routing: RoutingConfig
     poll_interval_seconds: int = 60
+    kanban: KanbanConfig = field(default_factory=KanbanConfig)
 
     @property
     def router(self) -> RoutingConfig:

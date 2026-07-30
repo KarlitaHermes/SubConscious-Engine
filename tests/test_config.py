@@ -37,10 +37,54 @@ def test_load_test_config_profile() -> None:
     assert str(config.state.file).endswith("state.test.yaml")
     assert str(config.logging.file).endswith("subconscious-engine-test.log")
     assert len(config.routing.rules) >= 4
+    assert config.kanban.enabled is False
+    assert config.kanban.hermes_bin == "hermes"
 
     alert_rule = next(r for r in config.routing.rules if r.get("event_type") == "alert")
     assert alert_rule["min_event_priority"] == 10
     assert alert_rule["priority"] == 50
+
+
+def test_load_kanban_config_block(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text(
+        """
+gateway: {url: "http://127.0.0.1:8642", api_key: "x"}
+adapter: {url: "http://127.0.0.1:8769"}
+idle:
+  threshold_minutes: 30
+  cooldown_minutes: 60
+  target_source: telegram
+  fallback_sources: []
+  vault_root: /tmp/vault
+logging:
+  level: INFO
+  file: /tmp/se-test.log
+  max_bytes: 1000
+  backup_count: 1
+state:
+  file: /tmp/se-state.yaml
+entry_points:
+  - id: idle
+    type: idle
+    enabled: false
+kanban:
+  enabled: true
+  hermes_bin: /usr/local/bin/hermes
+  board: default
+  default_assignee: ops
+  notify_platform: telegram
+  notify_chat_id: "112072229"
+""",
+        encoding="utf-8",
+    )
+    config = load_config(path)
+    assert config.kanban.enabled is True
+    assert config.kanban.hermes_bin == "/usr/local/bin/hermes"
+    assert config.kanban.board == "default"
+    assert config.kanban.default_assignee == "ops"
+    assert config.kanban.notify_platform == "telegram"
+    assert config.kanban.notify_chat_id == "112072229"
 
 
 def test_parse_entry_points_explicit() -> None:

@@ -90,7 +90,7 @@ SubConscious-Engine/
 
 **Deferred:** CLI session inject (adapter Platform enum) — see `TODO.md`. Prefer `telegram` as `idle.target_source`.
 
-**Parked (later):** Kanban as work engine, SE nudges via `hermes kanban` CLI only — see `docs/PLAN-KANBAN-SE.md`.
+**Parked (later):** Kanban as work engine — CLI client shipped (`src/delivery/kanban.py`); see `docs/PLAN-KANBAN-SE.md`.
 
 ## Configuration
 

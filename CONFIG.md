@@ -39,6 +39,16 @@ logging:
 
 state:
   file: "~/.hermes/subconscious-engine/state.yaml"
+
+# Optional — Hermes Kanban CLI (disabled by default; additive only)
+kanban:
+  enabled: false
+  hermes_bin: "hermes"
+  board: ""
+  default_assignee: ""
+  timeout_seconds: 60
+  notify_platform: ""      # e.g. telegram
+  notify_chat_id: ""       # stable Telegram chat_id, not Hermes session_id
 ```
 
 Legacy `sources` and `router` blocks are still accepted and migrated automatically.

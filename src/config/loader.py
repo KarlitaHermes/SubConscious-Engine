@@ -13,6 +13,7 @@ from src.config.models import (
     Config,
     GatewayConfig,
     IdleConfig,
+    KanbanConfig,
     LoggingConfig,
     StateConfig,
 )
@@ -65,6 +66,7 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     idle_raw = raw.get("idle", {})
     logging_raw = raw.get("logging", {})
     state_raw = raw.get("state", {})
+    kanban_raw = raw.get("kanban") or {}
 
     return Config(
         gateway=GatewayConfig(url=gateway_url, api_key=api_key),
@@ -92,4 +94,13 @@ def load_config(config_path: Optional[Path] = None) -> Config:
         entry_points=parse_entry_points(raw),
         routing=parse_routing(raw, default_routing_rules()),
         poll_interval_seconds=int(raw.get("poll_interval_seconds", 60)),
+        kanban=KanbanConfig(
+            enabled=bool(kanban_raw.get("enabled", False)),
+            hermes_bin=str(kanban_raw.get("hermes_bin", "hermes")),
+            board=str(kanban_raw.get("board", "") or ""),
+            default_assignee=str(kanban_raw.get("default_assignee", "") or ""),
+            timeout_seconds=float(kanban_raw.get("timeout_seconds", 60)),
+            notify_platform=str(kanban_raw.get("notify_platform", "") or ""),
+            notify_chat_id=str(kanban_raw.get("notify_chat_id", "") or ""),
+        ),
     )

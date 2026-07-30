@@ -1,56 +1,49 @@
-# Kanban + SE simplification (deferred)
+# Kanban + SE simplification
 
-Status: **parked** — revisit later. Not implemented yet.
+Status: **CLI client shipped** (additive). Triggers still optional / unused by default.
+
+Revert checkpoint before this work: `611d7f5` on `main`.
 
 ## Scope (locked)
 
-**Only add** SE’s ability to talk to Kanban via CLI (`hermes kanban create|schedule|unblock|list|show|notify-subscribe`).
+**Added:** SE can talk to Kanban via CLI (`src/delivery/kanban.py` → `hermes kanban …`).
 
-**Do not** remove or redesign existing SE behavior for v1:
+**Unchanged:** inject, idle, weather, inbox watcher, preferred_window, acks, notify gate, routing.
 
-- Keep inject, idle, weather, inbox watcher, preferred_window, acks, notify gate, routing — as they are.
-- Context return for Kanban work prefers **worker → `COMMS/Inbox/` → existing inbox → inject** (no new delivery path required beyond a report contract).
-- OOB Kanban notify is optional, not a replacement for session inject.
+**Context return:** worker writes `COMMS/Inbox/kanban-report-*.md` → existing inbox → inject (see `docs/CRON-AND-INBOX.md`).
 
-```mermaid
-flowchart LR
-  seExisting[Existing_SE] --> tg[Telegram_inject]
-  seNew[New_Kanban_CLI_client] --> kb[hermes_kanban]
-  kb -->|inbox_report| inbox[COMMS_Inbox]
-  inbox --> seExisting
+## Config
+
+```yaml
+kanban:
+  enabled: false          # must stay false until a trigger is wired
+  hermes_bin: hermes
+  board: ""
+  default_assignee: ""
+  timeout_seconds: 60
+  notify_platform: ""     # optional OOB
+  notify_chat_id: ""      # Telegram chat_id, not session_id
+```
+
+Usage from code (when `enabled`):
+
+```python
+from src.delivery.kanban import KanbanClient
+
+client = KanbanClient(
+    hermes_bin=config.kanban.hermes_bin,
+    board=config.kanban.board,
+    timeout_seconds=config.kanban.timeout_seconds,
+)
+result = await client.create("title", assignee="ops", idempotency_key="se-…", json_output=True)
 ```
 
 ## Hard constraint
 
-SE never opens `kanban.db`. Subprocess CLI only (dashboard HTTP later only if CLI is insufficient).
+Never open `kanban.db`. Subprocess CLI only.
 
-## Target flow (when wired)
+## Still TODO (when wiring a trigger)
 
-1. SE sensor (or config rule) decides to start work → CLI create/unblock card.
-2. Kanban worker runs; writes report under `COMMS/Inbox/` (agreed prefix); completes.
-3. Existing SE inbox path injects into Telegram session (context preserved).
-
-Existing Telegram decision nudges / maintenance injects can keep running until we opt specific workflows onto Kanban triggers — additive, not a big-bang cutover.
-
-## Thin spike (when we return)
-
-1. Add thin `src/delivery/kanban.py` (async subprocess wrapper + tests).
-2. Config knobs: hermes binary path, optional default assignee/board, telegram chat_id only if using notify-subscribe.
-3. One entry/rule or scripted hook that creates a card (prove CLI from SE).
-4. Document inbox report prefix for workers (`kanban-report-*.md` or similar).
-5. Leave all current sources/router/inject paths unchanged.
-
-## Non-goals for v1
-
-- Removing inject or Adapter client
-- Replacing idle/weather with Kanban
-- Opening `kanban.db`
-- Mandatory cutover of all workflows
-
-## Checklist when resuming
-
-- [ ] `src/delivery/kanban.py` CLI wrapper + unit tests (mocked subprocess)
-- [ ] Minimal config for kanban CLI
-- [ ] One optional trigger path (feature-flagged / disabled by default)
-- [ ] Inbox report filename contract in docs
-- [ ] No regressions to existing inject/inbox/idle tests
+- [ ] Optional sensor/rule that calls `KanbanClient` (feature-flagged)
+- [ ] Worker skill/docs: must write `kanban-report-*.md` then complete
+- [ ] Optional `notify-subscribe` after create when `notify_chat_id` set
