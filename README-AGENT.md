@@ -1274,10 +1274,11 @@ curl -s http://127.0.0.1:8771/health
 | `VERSION-NOTES.md` | **Upgrade notes** — queue delivery, install steps, rollback |
 | `hermes/subconscious-engine-nudges/SKILL.md` | **Hermes skill** — handle all nudge types + `/ack` |
 | `hermes/subconscious-engine-nudges/scripts/ack-engine.sh` | Shell helper for `POST /ack` |
-| `hermes/install-skill.sh` | Install nudges + config + inbox-digest-curator skills |
+| `hermes/install-skill.sh` | Install nudges + config + inbox-digest-curator + kanban-se-bridge skills |
 | `config.yaml.example` | Full production config template (includes `http_poll` + Warsaw weather) |
 | `examples/WORKING-DEPLOYMENT.md` | **Live deployment** — sanitized configs, file map, Hermes gateway snippet |
 | `docs/CRON-AND-INBOX.md` | **Cron → inbox → SE** — `deliver: local`, filename prefixes, agent workflow |
+| `docs/KANBAN-AND-SE.md` | **Hermes Kanban → SE** — create card, `kanban-report-*`, inject |
 | `config/examples/weather-warsaw.yaml` | Copy-paste Open-Meteo Warsaw `http_poll` example |
 | `config.test.yaml` | Safe test profile (idle off) |
 | `ARCHITECTURE.md` | Event-router design overview |
