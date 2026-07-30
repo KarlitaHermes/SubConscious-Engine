@@ -65,6 +65,7 @@ class App:
         self._install_signal_handlers()
         await self._start_sources()
         self._tasks.append(asyncio.create_task(self._consume_loop()))
+        self._tasks.append(asyncio.create_task(self._deferred_flush_loop()))
 
         logger.info("SubConscious Engine started")
         try:
@@ -89,6 +90,54 @@ class App:
                 )
             except Exception:
                 logger.exception("Router error for event %s", event.id)
+
+    async def _deferred_flush_loop(self) -> None:
+        """Promote parked preferred-window events when due (window or ASAP)."""
+        while self._running:
+            try:
+                await self._flush_deferred()
+            except Exception:
+                logger.exception("Deferred flush error")
+            await asyncio.sleep(60)
+
+    async def _flush_deferred(self) -> None:
+        from src.events.models import Event, EventSourceKind
+        from src.router.window import FORCE_ASAP_META
+
+        for item in self._state.due_deferred():
+            key = str(item.get("cooldown_key") or "")
+            if not key:
+                continue
+            source_raw = str(item.get("source") or "rest")
+            try:
+                source = EventSourceKind(source_raw)
+            except ValueError:
+                source = EventSourceKind.REST
+            meta = dict(item.get("metadata") or {})
+            if item.get("force_asap"):
+                meta[FORCE_ASAP_META] = True
+            kwargs: dict = {
+                "text": str(item.get("text") or ""),
+                "event_type": str(item.get("event_type") or "custom"),
+                "source": source,
+                "entry_point": item.get("entry_point"),
+                "preferred_target": item.get("preferred_target"),
+                "preferred_source": item.get("preferred_source"),
+                "priority": int(item.get("priority") or 0),
+                "cooldown_key": key,
+                "metadata": meta,
+            }
+            if item.get("event_id"):
+                kwargs["id"] = str(item["event_id"])
+            event = Event(**kwargs)
+            # Drop before publish so we do not double-flush every minute.
+            self._state.clear_deferred(key)
+            logger.info(
+                "Promoting deferred %s (force_asap=%s)",
+                key,
+                bool(item.get("force_asap")),
+            )
+            await self._bus.publish(event)
 
     async def _start_sources(self) -> None:
         """Start all configured entry points."""

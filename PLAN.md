@@ -1,100 +1,101 @@
 # SubConscious Engine — Project Plan
 
 ## Vision
-A persistent, autonomous engine that monitors the Hermes Gateway and injects "subconscious" events into active sessions. The engine runs alongside the gateway, detects idle periods, and triggers maintenance tasks, research, or other out-of-band activities.
 
-## What It Does
-1. Runs as a standalone daemon (systemd service) alongside Hermes Gateway
-2. Monitors gateway session activity via the Gateway REST API
-3. Detects idle periods (no human activity for N minutes)
-4. Injects maintenance prompts into the active user session via SubConscious Adapter
-5. Manages its own state, cooldowns, and task scheduling
+A persistent daemon alongside Hermes Gateway that injects “subconscious” events into active sessions: idle maintenance, research, vault/inbox signals, weather, and custom drops — without modifying gateway code.
 
-## What It Does NOT Do
-- Does NOT modify the Hermes Gateway code
-- Does NOT directly access the gateway's internal APIs
-- Does NOT manage platform adapters (that's SubConscious Adapter's job)
-- Does NOT store agent responses or conversation history
+## What it does
 
-## Architecture
+1. Runs as a standalone systemd service
+2. Ingests events from configured **entry points** (idle, file drop, inbound REST, outbound HTTP poll, vault inbox/rules)
+3. Gates noise (cooldown, in-progress, budget, rules) via **NotifyGate**
+4. Routes to session(s) and injects via SubConscious Adapter (`delivery: queue`)
+5. Persists cooldowns, acks, and dedupe in its own YAML state file
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    SubConscious Engine                    │
-│                                                           │
-│  ┌──────────────┐  ┌──────────────┐  ┌───────────────┐  │
-│  │  Idle Engine  │  │  Task Queue  │  │   Scheduler   │  │
-│  │  (detects     │  │  (what to    │  │  (when to     │  │
-│  │   idle time)  │  │   execute)   │  │   trigger)    │  │
-│  └──────┬───────┘  └──────┬───────┘  └───────┬───────┘  │
-│         │                 │                   │          │
-│         └────────────┬────┘───────────────────┘          │
-│                      ▼                                    │
-│              ┌──────────────┐                            │
-│              │  App (main)  │                            │
-│              │  (event loop)│                            │
-│              └──────┬───────┘                            │
-│                     │                                     │
-│                     ▼ HTTP                               │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │         SubConscious Adapter (port 8769)          │   │
-│  │         POST /inject → Gateway → User            │   │
-│  └──────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
-```
+## What it does not do
 
-## Technology Choices
-- **Language:** Python 3.11+
-- **HTTP Client:** aiohttp (already in gateway venv)
-- **Config:** YAML file (`~/.hermes/subconscious-engine/config.yaml`)
-- **State:** Simple YAML/JSON state file (no SQLite)
-- **Service:** systemd unit file
-- **Logging:** Python logging to `~/.hermes/logs/subconscious-engine.log`
+- Does **not** modify Hermes Gateway source
+- Does **not** talk to gateway internal APIs for inject (adapter only)
+- Does **not** manage platform adapters (adapter’s job)
+- Does **not** store agent conversation history
 
-## Project Structure
+## Architecture (current)
 
 ```
-subconscious-engine/
-├── config.yaml                 # Main configuration
-├── config.yaml.example         # Example config with all options
-├── requirements.txt            # Python dependencies (minimal)
-├── setup.sh                    # Install script
+┌────────────────────── SubConscious Engine ──────────────────────┐
+│                                                                  │
+│  entry_points (sources) ──▶ EventBus ──▶ NotifyGate ──▶ Router   │
+│       │                                              │           │
+│       └──────── state.yaml ◀─────────────────────────┘           │
+│                                                                  │
+│  HTTP out: Adapter GET /sessions + POST /inject                  │
+│  HTTP in:  engine :8770  /health /events /ack                    │
+│  Idle:     Gateway REST for last human activity                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+See `ARCHITECTURE.md` for module detail.
+
+## Technology
+
+| Piece | Choice |
+|-------|--------|
+| Language | Python 3.11+ |
+| HTTP | aiohttp |
+| Config / state | YAML |
+| Service | systemd |
+| Logging | Rotating file under `~/.hermes/logs/` |
+
+Dependencies: **aiohttp**, **pyyaml** (plus pytest for dev).
+
+## Project structure
+
+```
+SubConscious-Engine/
+├── config.yaml.example
+├── config.test.yaml
+├── pyproject.toml
+├── requirements.txt
+├── ARCHITECTURE.md
+├── CONFIG.md
+├── README-AGENT.md
+├── TODO.md
+├── docs/
+│   └── CRON-AND-INBOX.md
+├── examples/
+│   └── working-deployment/     # sanitized production-shaped configs
+├── hermes/                     # installable Hermes skills
 ├── systemd/
-│   └── subconscious-engine.service  # systemd unit file
+│   └── subconscious-engine.service
+├── scripts/
+│   └── install.sh
 ├── src/
-│   ├── __init__.py
-│   ├── __main__.py             # Entry point
-│   ├── app.py                  # Main application loop
-│   ├── config.py               # Configuration loader
-│   ├── idle_engine.py          # Idle detection logic
-│   ├── delivery.py             # SubConscious HTTP client
-│   ├── state.py                # State management (cooldowns, timestamps)
+│   ├── __main__.py             # python -m src
+│   ├── app.py                  # orchestration
+│   ├── state.py
+│   ├── notify_gate.py
+│   ├── config/
+│   ├── events/
+│   ├── router/
+│   ├── delivery/
+│   ├── sources/
+│   ├── checks/
 │   └── signals/
-│       ├── __init__.py
-│       └── session.py          # Session monitoring signals
-├── tests/
-│   ├── __init__.py
-│   ├── test_idle_engine.py
-│   ├── test_delivery.py
-│   └── test_state.py
-└── scripts/
-    └── install.sh              # Installation helper
+└── tests/                      # pytest, mocked HTTP
 ```
 
-## Dependencies (Minimal)
-- `aiohttp` — HTTP client for SubConscious Adapter API
-- `pyyaml` — Config file parsing
+## Status
 
-That's it. No heavy frameworks.
+**Shipped (v1 event router):** idle + maintenance/research alternation, pending-decisions wake nudge, file drop, inbound REST + ack, http_poll (including Open-Meteo), vault inbox/rules sources, routing rules, notify gate, nudge budget, queue delivery, **preferred_window** (soft schedule → park or ASAP).
 
-## Configuration Reference
+**Deferred:** CLI session inject (adapter Platform enum) — see `TODO.md`. Prefer `telegram` as `idle.target_source`.
 
-See `CONFIG.md` for full configuration options.
+**Parked (later):** Kanban as work engine, SE nudges via `hermes kanban` CLI only — see `docs/PLAN-KANBAN-SE.md`.
 
-## Coding Standards
+## Configuration
 
-See `CODING_STANDARD.md` for detailed coding conventions.
+See `CONFIG.md`. Production-shaped examples: `examples/WORKING-DEPLOYMENT.md`.
 
-## Lessons Learned from Legacy Automation
+## Coding standards
 
-See `LESSONS_LEARNED.md` for pitfalls to avoid.
+See `CODING_STANDARD.md`. Lessons from earlier automation: `LESSONS_LEARNED.md`.

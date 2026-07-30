@@ -111,7 +111,8 @@ class IdleEventSource:
             cooldown_key=IDLE_COOLDOWN_KEY,
         )
         reason = self._gate.check(self._state, probe)
-        if reason is not None:
+        if self._gate.blocks_publish(reason):
+            assert reason is not None
             self._gate.log_suppressed(probe, reason, source="idle")
             return
 
@@ -170,7 +171,8 @@ class IdleEventSource:
             priority=5,
         )
         reason = self._gate.check(self._state, probe)
-        if reason is not None:
+        if self._gate.blocks_publish(reason):
+            assert reason is not None
             self._gate.log_suppressed(probe, reason, source="idle")
             return
 

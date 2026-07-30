@@ -104,11 +104,12 @@ Compared to `config.yaml.example`, the live production config:
 - **Idle:** 60 min threshold, 240 min cooldown, telegram-only (no CLI fallback)
 - **Entry points:** idle, file drop (`events_drop`), **inbox** (`COMMS/Inbox/` for crons), inbound HTTP (`api` :8770), Open-Meteo poll (`weather_example`, every 6 h)
 - **Routing:** per-entry-point rules with longer cooldowns (e.g. weather 720 min, idle maintenance 480 min)
+- **Preferred window:** optional on rules — prefer listed hours, else ASAP (`CONFIG.md`)
 - **Notify gate:** Hermes acks via `POST /ack` on 8770; engine suppresses duplicate nudges
 
 ## Do not publish / commit
 
-- `~/.hermes/subconscious-engine/state.yaml` — runtime cooldowns, session IDs, ack history
+- `~/.hermes/subconscious-engine/state.yaml` — runtime cooldowns, deferred parks, session IDs, ack history
 - `~/.hermes/subconscious-engine/config.yaml.bak`
 - `~/.hermes/logs/*`
 - Full `~/.hermes/config.yaml` — contains gateway API keys and platform secrets

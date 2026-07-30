@@ -37,3 +37,5 @@ Engine sends `delivery: queue` — nudges do not interrupt a busy session. Requi
 ## Notify gate
 
 Engine suppresses duplicate nudges when: cooldown active, same key `in_progress`, no routing rule, poll item already seen. **Always ack `in_progress` promptly.**
+
+Routing may also use `preferred_window` (prefer hours, else ASAP) — that parks in engine state, it is not an ack. Hermes still acks only after a real inject.

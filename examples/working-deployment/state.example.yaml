@@ -52,6 +52,19 @@ poll_seen:
   weather_example:
     open-meteo:Example City:2026-06-15T12:00: 1709998000.0
 
+deferred: {}
+# Example when parked for preferred window:
+# deferred:
+#   idle_engine:
+#     event_type: maintenance
+#     text: "..."
+#     source: idle
+#     entry_point: idle
+#     priority: 10
+#     preferred_hours: [0, 1, 2]
+#     prefer_until: 1710082800.0
+#     created_at: 1710000000.0
+
 processed_files:
   events_drop:
     sample-nudge.json: 1709997000.0

@@ -14,19 +14,19 @@
 **Problem:** We tried to write directly to `state.db` to inject messages. The gateway's schema changed and broke our code.
 **Solution:** The engine manages its own state file (`~/.hermes/subconscious-engine/state.yaml`). The gateway's DB is read-only (via REST API).
 
-### 4. Keep the Engine Stateless Where Possible
+### 4. Keep State Boring and Local
 **Problem:** The previous subsystem had complex state management with decisions queues, goals trackers, etc.
-**Solution:** Minimal state — just cooldown timestamps and last trigger times. Store in a simple YAML file.
+**Solution:** One engine-owned YAML file. Grow keys only when needed (cooldowns, acks, dedupe, nudge budget) — never the gateway DB or a second datastore.
 
 ## Code Lessons
 
-### 5. Don't Over-Engineer the Idle Detection
-**Problem:** The old idle engine had multiple config options, alternating maintenance/research prompts, etc.
-**Solution:** Simple idle detection: check last user activity timestamp. If idle > threshold, trigger. One prompt type.
+### 5. Keep Idle Detection Simple; Layer Behavior in Events
+**Problem:** The old idle engine buried scheduling and prompt variety in one opaque loop.
+**Solution:** Idle remains “activity older than threshold → publish an event.” Alternating maintenance/research and pending-decisions wake nudges are just different event types + routing/acks — not a separate scheduler service.
 
-### 6. Don't Block the Main Loop
+### 6. Don't Block the Consume Loop
 **Problem:** The legacy daemon's main loop could block on long-running operations.
-**Solution:** All HTTP calls use async with timeouts. The main loop never blocks.
+**Solution:** Async HTTP with timeouts; sources and the bus consumer catch errors and continue. Never block the loop on agent work — inject and return.
 
 ### 7. Don't Hardcode Platform-Specific Logic
 **Problem:** The legacy daemon had Telegram-specific code (TelegramSender, batcher, etc.).
@@ -34,7 +34,7 @@
 
 ### 8. Don't Use Complex IPC Mechanisms
 **Problem:** We tried Unix sockets, WebSocket, direct DB access, message queues...
-**Solution:** Simple HTTP REST API. `GET /sessions` to list, `POST /inject` to send. That's it.
+**Solution:** Plain HTTP. Adapter: `GET /sessions`, `POST /inject`. Engine ingress: `POST /events`, `POST /ack`. No sockets, no shared DB writes.
 
 ## Deployment Lessons
 

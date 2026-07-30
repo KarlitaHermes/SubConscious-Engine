@@ -149,6 +149,8 @@ Summarize what you did. Do not paste the full ack footer unless debugging.
 
 **When:** User idle ≥ threshold (default 30 min). Odd idle triggers alternate maintenance/research; maintenance is the odd cycles.
 
+If the engine config sets `preferred_window` on the maintenance rule, the inject may wait for those hours (or arrive ASAP if the slot was missed). You only see the message when it is actually injected — then ack as usual.
+
 **Prompt signals:**
 
 - `[SUBCONSCIOUS] System idle detected`

@@ -86,6 +86,18 @@ routing:
 
 Cooldowns are per rule (`deliver.cooldown_minutes`) and per ack key (`cooldown_key` on events).
 
+**Preferred window** (soft schedule — prefer hours, else ASAP):
+
+```yaml
+deliver:
+  preferred_window:
+    hours: [0, 1, 2]    # prefer overnight
+    max_wait_hours: 12  # if next window farther → inject now
+    fallback: asap
+```
+
+Parks in `state.deferred` when waiting; flush promotes in-window or after the window ends. Not the same as `active_hours` (hard drop). Details: `CONFIG.md`, `README-AGENT.md` §5.6.
+
 ### `state` — persistence
 
 ```yaml
@@ -93,7 +105,7 @@ state:
   file: ~/.hermes/subconscious-engine/state.yaml
 ```
 
-Do **not** edit `state.yaml` by hand — cooldowns, `tasks_in_progress`, and `poll_seen` are engine-managed. Shape: `examples/working-deployment/state.example.yaml`.
+Do **not** edit `state.yaml` by hand — cooldowns, `tasks_in_progress`, `poll_seen`, and `deferred` are engine-managed. Shape: `examples/working-deployment/state.example.yaml`.
 
 ---
 
@@ -111,6 +123,19 @@ Do **not** edit `state.yaml` by hand — cooldowns, `tasks_in_progress`, and `po
 - Increase `idle.cooldown_minutes` and per-rule `cooldown_minutes` (maintenance/research)
 - Hermes must ack `idle_engine` / `pending_decisions` — see nudges skill
 - Notify gate blocks re-fire while `in_progress`
+- Optional: `preferred_window` on maintenance so overnight work waits for night (or ASAP if the slot is missed)
+
+### Prefer overnight maintenance
+
+```yaml
+# under routing.rules → maintenance → deliver:
+preferred_window:
+  hours: [0, 1, 2]
+  max_wait_hours: 12
+  fallback: asap
+```
+
+Restart engine after edit. See `CONFIG.md`.
 
 ### Enable weather poll
 

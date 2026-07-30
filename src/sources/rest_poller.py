@@ -114,7 +114,8 @@ class RestPollEventSource:
         for event, dedupe_key in parsed:
             if self._gate is not None:
                 reason = self._gate.check(self._state, event, poll_item_key=dedupe_key)
-                if reason is not None:
+                if self._gate.blocks_publish(reason):
+                    assert reason is not None
                     self._gate.log_suppressed(
                         event,
                         reason,

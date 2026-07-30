@@ -100,6 +100,11 @@ routing:
         priority: 10
         target_sources:
           - telegram
+        # Optional soft schedule (prefer overnight, else ASAP) — see CONFIG.md:
+        # preferred_window:
+        #   hours: [0, 1, 2]
+        #   max_wait_hours: 12
+        #   fallback: asap
 
     - name: idle-research
       match:

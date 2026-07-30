@@ -230,3 +230,42 @@ def test_recent_deliveries_returns_type_and_minutes(tmp_path: Path, monkeypatch:
     assert abs(recent[0][1] - 5.0) < 0.1
     assert recent[1][0] == "maintenance"
     assert abs(recent[1][1] - 10.0) < 0.1
+
+
+def test_park_and_due_deferred(tmp_path: Path) -> None:
+    from datetime import datetime
+
+    state = StateManager(tmp_path / "state.yaml")
+    prefer_until = datetime(2026, 7, 31, 3, 0, 0).timestamp()
+    state.park_deferred(
+        "idle_engine",
+        event_type="maintenance",
+        text="hold me",
+        source="idle",
+        entry_point="idle",
+        priority=10,
+        preferred_target=None,
+        preferred_source="telegram",
+        prefer_until=prefer_until,
+        preferred_hours=[0, 1, 2],
+    )
+    assert state.get_deferred("idle_engine") is not None
+
+    # Still waiting (afternoon before prefer_until)
+    afternoon = datetime(2026, 7, 30, 14, 0, 0).timestamp()
+    assert state.due_deferred(now=afternoon) == []
+
+    # Inside preferred hour
+    night = datetime(2026, 7, 31, 1, 0, 0).timestamp()
+    due = state.due_deferred(now=night)
+    assert len(due) == 1
+    assert due[0]["force_asap"] is False
+
+    # Past prefer_until outside window → ASAP
+    morning = datetime(2026, 7, 31, 4, 0, 0).timestamp()
+    due = state.due_deferred(now=morning)
+    assert len(due) == 1
+    assert due[0]["force_asap"] is True
+
+    state.clear_deferred("idle_engine")
+    assert state.get_deferred("idle_engine") is None

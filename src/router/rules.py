@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
+
+from src.router.window import PreferredWindow
 
 
 @dataclass
@@ -22,9 +23,10 @@ class RouteRule:
     min_event_priority: int = 0
     active_hours: list[int] = field(default_factory=list)
     active_days: list[int] = field(default_factory=list)
+    preferred_window: Optional[PreferredWindow] = None
 
     def is_active_now(self, now: Optional[datetime] = None) -> bool:
-        """Return True if the rule is within its configured time window."""
+        """Return True if the rule is within its configured hard time gate."""
         current = now or datetime.now()
         if self.active_days and current.weekday() not in self.active_days:
             return False
@@ -53,6 +55,7 @@ def parse_rules(raw: list[dict[str, Any]]) -> list[RouteRule]:
                 min_event_priority=int(item.get("min_event_priority", 0)),
                 active_hours=[int(h) for h in (item.get("active_hours") or [])],
                 active_days=[int(d) for d in (item.get("active_days") or [])],
+                preferred_window=PreferredWindow.from_raw(item.get("preferred_window")),
             )
         )
     return rules

@@ -207,9 +207,10 @@ idle:
   threshold_minutes: 30
   cooldown_minutes: 60
   target_source: "telegram"
-  fallback_sources: ["cli"]
-  vault_root: "~/Documents/Obsidian Vault"
+  fallback_sources: []  # do not use cli until adapter fix (TODO.md)
+  vault_root: "~/path/to/your/obsidian-vault"
   wake_grace_minutes: 10
+  nudge_budget_per_hour: 6
 ```
 
 | Field | Meaning |
@@ -217,9 +218,10 @@ idle:
 | `threshold_minutes` | No human activity for this long → session considered idle. |
 | `cooldown_minutes` | Minimum minutes between idle-triggered injections (also default for routing cooldowns). |
 | `target_source` | Preferred session source for idle events (use `telegram`). |
-| `fallback_sources` | Tried if primary source has no session. CLI is broken; prefer `[]`. |
+| `fallback_sources` | Router fallbacks if primary has no session. CLI inject is broken; keep `[]`. |
 | `vault_root` | Obsidian vault path; used to build maintenance/research/decision prompts. |
 | `wake_grace_minutes` | After idle, if human activity returns within this window, emit pending-decisions nudge. |
+| `nudge_budget_per_hour` | Max successful deliveries per hour across sources (`0` = unlimited). |
 
 This block configures the **idle entry point** behaviour. It does not enable/disable the idle entry point — that is controlled under `entry_points`.
 
@@ -330,8 +332,12 @@ routing:
         cooldown_minutes: 60
         priority: 10
         broadcast: false
-        active_hours: []        # optional — list of hours 0-23
+        active_hours: []        # hard gate — drop outside these hours (no queue)
         active_days: []         # optional — 0=Mon .. 6=Sun
+        preferred_window:       # soft schedule — prefer these hours, else ASAP
+          hours: [0, 1, 2]      # 00:00–02:59 local; omit block to disable
+          max_wait_hours: 12    # if next window is farther → deliver now
+          fallback: asap
 ```
 
 | `match` field | Meaning |
@@ -347,6 +353,30 @@ routing:
 | `cooldown_minutes` | Per-event cooldown before same type fires again |
 | `priority` | Higher wins when multiple rules match |
 | `broadcast` | If true, inject to all matching sessions |
+| `active_hours` / `active_days` | Hard gate: outside window → drop (no defer) |
+| `preferred_window` | Soft schedule: wait for listed hours if soon, else ASAP (see below) |
+
+#### Preferred window (soft schedule)
+
+Use when a nudge should **prefer** a time of day (e.g. overnight maintenance) but must not be lost if that slot is missed.
+
+```yaml
+preferred_window:
+  hours: [0, 1, 2]    # prefer 00:00–02:59
+  max_wait_hours: 12  # default 12
+  fallback: asap      # only mode in v1
+```
+
+| Situation | Behavior |
+|-----------|----------|
+| Current hour in `hours` | Deliver now |
+| Next window starts within `max_wait_hours` | Park in `state.deferred`; flush ~every 60s promotes when the window opens |
+| Next window is farther than `max_wait_hours` (e.g. 04:00 → next midnight) | Deliver **ASAP** now |
+| Still parked when window ends | Promote with ASAP (do not wait another full day) |
+
+Cooldownupe: one deferred entry per `cooldown_key` (newer emit replaces). Cooldown starts only after a successful inject, not when parking.
+
+**Do not confuse with `active_hours`:** that drops events outside the hours; `preferred_window` holds or falls back to ASAP.
 
 **Legacy format** still works and is auto-migrated:
 
@@ -383,7 +413,7 @@ state:
   file: "~/.hermes/subconscious-engine/state.yaml"
 ```
 
-Persists cooldowns, idle counters, processed inbox files, vault rule last-run times, and **outbound poll dedup** (`poll_seen`). Do not delete while the engine is running.
+Persists cooldowns, idle counters, processed inbox files, vault rule last-run times, **outbound poll dedup** (`poll_seen`), and **preferred-window parks** (`deferred`). Do not delete while the engine is running.
 
 ---
 
@@ -1250,8 +1280,9 @@ curl -s http://127.0.0.1:8771/health
 | `docs/CRON-AND-INBOX.md` | **Cron → inbox → SE** — `deliver: local`, filename prefixes, agent workflow |
 | `config/examples/weather-warsaw.yaml` | Copy-paste Open-Meteo Warsaw `http_poll` example |
 | `config.test.yaml` | Safe test profile (idle off) |
-| `ARCHITECTURE.md` | Internal design overview |
-| `CONFIG.md` | Shorter config reference (partially legacy) |
+| `ARCHITECTURE.md` | Event-router design overview |
+| `CONFIG.md` | Config / state / env reference |
+| `PLAN.md` | Vision, structure, shipped vs deferred |
 | `TODO.md` | Known limitations (CLI inject, testing rules) |
 | `tests/test_rest_poll_parse.py` | Unit tests for poll response parsing |
 | `tests/test_rest_poller.py` | Integration tests with ephemeral stub server |

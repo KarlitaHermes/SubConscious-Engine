@@ -27,6 +27,7 @@
 - Target resolution: rules + optional hints on event (not mandatory)
 - External REST polling (`http_poll` entry points) — outbound fetch + dedupe
 - Idle: maintenance/research alternation + pending-decisions wake nudge
+- Preferred window: soft schedule on routing rules (park or ASAP)
 - `src/checks/` — vault file scanning (decisions, inbox classification, rules.md evaluation)
 
 ## Testing guidelines

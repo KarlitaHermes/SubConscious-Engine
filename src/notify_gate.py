@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from enum import Enum
 from typing import Optional
 
@@ -10,6 +11,7 @@ from src.config import Config
 from src.config.models import EntryPoint
 from src.events.models import Event, EventSourceKind
 from src.router.rules import RouteRule, parse_rules, select_rule
+from src.router.window import FORCE_ASAP_META, should_defer_for_preferred_window
 from src.state import StateManager
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,7 @@ class SuppressReason(str, Enum):
     IN_PROGRESS = "in_progress"
     COOLDOWN = "cooldown"
     NUDGE_BUDGET = "nudge_budget"
+    DEFER_PREFERRED_WINDOW = "defer_preferred_window"
 
 
 class NotifyGate:
@@ -38,13 +41,15 @@ class NotifyGate:
         event: Event,
         *,
         poll_item_key: Optional[str] = None,
+        now: Optional[datetime] = None,
     ) -> Optional[SuppressReason]:
-        """Return a suppress reason, or None if the event may notify."""
+        """Return a suppress/defer reason, or None if the event may deliver now."""
         rule = select_rule(
             self._rules,
             event.event_type,
             event.priority,
             event.entry_point,
+            now=now,
         )
         if rule is None:
             return SuppressReason.NO_RULE
@@ -63,12 +68,26 @@ class NotifyGate:
         if state.is_in_cooldown(cooldown_minutes, key=cooldown_key):
             return SuppressReason.COOLDOWN
 
-        # Nudge budget: global rate limit across all event sources
         budget = self._config.idle.nudge_budget_per_hour
         if budget > 0 and state.nudge_count_window(3600) >= budget:
             return SuppressReason.NUDGE_BUDGET
 
+        if rule.preferred_window is not None:
+            force_asap = bool(event.metadata.get(FORCE_ASAP_META))
+            defer, _prefer_until = should_defer_for_preferred_window(
+                rule.preferred_window,
+                now,
+                force_asap=force_asap,
+            )
+            if defer:
+                return SuppressReason.DEFER_PREFERRED_WINDOW
+
         return None
+
+    @staticmethod
+    def blocks_publish(reason: Optional[SuppressReason]) -> bool:
+        """True when sources should not publish (defer still publishes for parking)."""
+        return reason is not None and reason is not SuppressReason.DEFER_PREFERRED_WINDOW
 
     def should_notify(
         self,
@@ -76,9 +95,30 @@ class NotifyGate:
         event: Event,
         *,
         poll_item_key: Optional[str] = None,
+        now: Optional[datetime] = None,
     ) -> bool:
-        """Return True when the event should be published or delivered."""
-        return self.check(state, event, poll_item_key=poll_item_key) is None
+        """Return True when the event should be published (deliver now or defer)."""
+        return not self.blocks_publish(
+            self.check(state, event, poll_item_key=poll_item_key, now=now),
+        )
+
+    def prefer_until_ts(
+        self,
+        event: Event,
+        *,
+        now: Optional[datetime] = None,
+    ) -> Optional[float]:
+        """prefer_until timestamp when the event should wait for a preferred window."""
+        rule = self.resolve_rule(event, now=now)
+        if rule is None or rule.preferred_window is None:
+            return None
+        force_asap = bool(event.metadata.get(FORCE_ASAP_META))
+        defer, prefer_until = should_defer_for_preferred_window(
+            rule.preferred_window,
+            now,
+            force_asap=force_asap,
+        )
+        return prefer_until if defer else None
 
     def log_suppressed(
         self,
@@ -88,7 +128,7 @@ class NotifyGate:
         poll_item_key: Optional[str] = None,
         source: str = "",
     ) -> None:
-        """Emit a debug log for a suppressed event."""
+        """Emit a debug log for a suppressed or deferred event."""
         prefix = f"{source} " if source else ""
         key = event.cooldown_key or event.event_type
         if reason is SuppressReason.POLL_SEEN:
@@ -118,6 +158,13 @@ class NotifyGate:
                 "%sevent type=%s suppressed — nudge budget exceeded",
                 prefix,
                 event.event_type,
+            )
+        elif reason is SuppressReason.DEFER_PREFERRED_WINDOW:
+            logger.debug(
+                "%sevent type=%s deferred — preferred window (%s)",
+                prefix,
+                event.event_type,
+                key,
             )
         else:
             logger.debug(
@@ -153,18 +200,25 @@ class NotifyGate:
             priority=entry_point.handle.default_priority,
         )
         reason = self.check(state, probe)
-        if reason is not None:
+        if self.blocks_publish(reason):
+            assert reason is not None
             self.log_suppressed(probe, reason, source=f"http_poll {entry_point.id}")
             return False
         return True
 
-    def resolve_rule(self, event: Event) -> Optional[RouteRule]:
+    def resolve_rule(
+        self,
+        event: Event,
+        *,
+        now: Optional[datetime] = None,
+    ) -> Optional[RouteRule]:
         """Return the routing rule for an event, if any."""
         return select_rule(
             self._rules,
             event.event_type,
             event.priority,
             event.entry_point,
+            now=now,
         )
 
     def cooldown_key(self, event: Event) -> str:

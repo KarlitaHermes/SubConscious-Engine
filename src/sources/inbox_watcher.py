@@ -96,7 +96,8 @@ class InboxEventSource:
             )
             if self._gate is not None:
                 reason = self._gate.check(self._state, event)
-                if reason is not None:
+                if self._gate.blocks_publish(reason):
+                    assert reason is not None
                     self._gate.log_suppressed(
                         event,
                         reason,

@@ -311,6 +311,80 @@ async def test_handle_skipped_outside_active_hours(
     mock_delivery.inject_many.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_handle_parks_for_preferred_window(
+    tmp_path,
+    mock_registry: AsyncMock,
+    mock_delivery: AsyncMock,
+) -> None:
+    from datetime import datetime
+
+    from src.state import StateManager
+
+    state = StateManager(tmp_path / "state.yaml")
+    config = make_config(
+        tmp_path,
+        rules=[
+            {
+                "event_type": "maintenance",
+                "target_sources": ["telegram"],
+                "preferred_window": {"hours": [0, 1, 2], "max_wait_hours": 12},
+            },
+        ],
+    )
+    router = Router(config, mock_registry, mock_delivery, state)
+    event = Event(
+        text="night maintenance",
+        event_type="maintenance",
+        source=EventSourceKind.IDLE,
+        cooldown_key="idle_engine",
+    )
+    results = await router.handle(event, now=datetime(2026, 7, 30, 14, 0, 0))
+    assert results == []
+    mock_delivery.inject_many.assert_not_awaited()
+    parked = state.get_deferred("idle_engine")
+    assert parked is not None
+    assert parked["text"] == "night maintenance"
+    assert parked["preferred_hours"] == [0, 1, 2]
+
+
+@pytest.mark.asyncio
+async def test_handle_asap_when_past_preferred_window(
+    tmp_path,
+    mock_registry: AsyncMock,
+    mock_delivery: AsyncMock,
+) -> None:
+    from datetime import datetime
+
+    tg = make_session()
+    mock_registry.find_sessions_for_sources.return_value = [tg]
+    mock_delivery.inject_many.return_value = [
+        DeliveryResult(session_id=tg.id, success=True),
+    ]
+    config = make_config(
+        tmp_path,
+        rules=[
+            {
+                "event_type": "maintenance",
+                "target_sources": ["telegram"],
+                "preferred_window": {"hours": [0, 1, 2], "max_wait_hours": 12},
+            },
+        ],
+    )
+    router = Router(config, mock_registry, mock_delivery, _fresh_state(tmp_path))
+    event = Event(
+        text="missed night — do ASAP",
+        event_type="maintenance",
+        source=EventSourceKind.IDLE,
+        cooldown_key="idle_engine",
+    )
+    # 04:00 → ~20h until next window > max_wait 12 → ASAP deliver
+    results = await router.handle(event, now=datetime(2026, 7, 30, 4, 0, 0))
+    assert len(results) == 1
+    assert results[0].success is True
+    mock_delivery.inject_many.assert_awaited_once()
+
+
 def _fresh_state(tmp_path):
     from src.state import StateManager
 

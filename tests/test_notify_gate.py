@@ -175,3 +175,40 @@ def test_nudge_budget_zero_means_unlimited(tmp_path: Path) -> None:
         state.record_delivery(f"e{i}", "test", ["s1"], success=True, cooldown_key=f"k{i}")
     # Should still allow even after many nudges
     assert gate.check(state, _event()) is None
+
+
+def test_defer_preferred_window_afternoon(tmp_path: Path) -> None:
+    from datetime import datetime
+
+    state = StateManager(tmp_path / "state.yaml")
+    gate = _gate(
+        tmp_path,
+        rules=[
+            {
+                "event_type": "maintenance",
+                "preferred_window": {"hours": [0, 1, 2], "max_wait_hours": 12},
+            },
+        ],
+    )
+    event = _event(event_type="maintenance", cooldown_key="idle_engine")
+    reason = gate.check(state, event, now=datetime(2026, 7, 30, 14, 0, 0))
+    assert reason is SuppressReason.DEFER_PREFERRED_WINDOW
+    assert gate.blocks_publish(reason) is False
+    assert gate.should_notify(state, event, now=datetime(2026, 7, 30, 14, 0, 0)) is True
+
+
+def test_asap_when_window_too_far(tmp_path: Path) -> None:
+    from datetime import datetime
+
+    state = StateManager(tmp_path / "state.yaml")
+    gate = _gate(
+        tmp_path,
+        rules=[
+            {
+                "event_type": "maintenance",
+                "preferred_window": {"hours": [0, 1, 2], "max_wait_hours": 12},
+            },
+        ],
+    )
+    event = _event(event_type="maintenance", cooldown_key="idle_engine")
+    assert gate.check(state, event, now=datetime(2026, 7, 30, 4, 0, 0)) is None

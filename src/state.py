@@ -343,3 +343,83 @@ class StateManager:
             result.append((d.get("event_type", "unknown"), minutes_ago))
         return result
 
+    # ------------------------------------------------------------------
+    # Deferred queue: preferred window → hold, else ASAP after prefer_until
+    # ------------------------------------------------------------------
+
+    def park_deferred(
+        self,
+        cooldown_key: str,
+        *,
+        event_type: str,
+        text: str,
+        source: str,
+        entry_point: Optional[str],
+        priority: int,
+        preferred_target: Optional[str],
+        preferred_source: Optional[str],
+        prefer_until: float,
+        preferred_hours: list[int],
+        metadata: Optional[dict[str, Any]] = None,
+        event_id: Optional[str] = None,
+    ) -> None:
+        """Park an event until preferred window opens or prefer_until (ASAP)."""
+        deferred = self._data.setdefault("deferred", {})
+        deferred[cooldown_key] = {
+            "event_id": event_id,
+            "event_type": event_type,
+            "text": text,
+            "source": source,
+            "entry_point": entry_point,
+            "priority": priority,
+            "preferred_target": preferred_target,
+            "preferred_source": preferred_source,
+            "cooldown_key": cooldown_key,
+            "prefer_until": float(prefer_until),
+            "preferred_hours": list(preferred_hours),
+            "metadata": dict(metadata or {}),
+            "created_at": time.time(),
+        }
+        self.save()
+        logger.info(
+            "Parked deferred %s until prefer_until=%.0f (hours=%s)",
+            cooldown_key,
+            prefer_until,
+            preferred_hours,
+        )
+
+    def clear_deferred(self, cooldown_key: str) -> None:
+        """Remove a parked deferred event."""
+        deferred = self._data.get("deferred") or {}
+        if cooldown_key in deferred:
+            deferred.pop(cooldown_key, None)
+            self.save()
+
+    def get_deferred(self, cooldown_key: str) -> Optional[dict[str, Any]]:
+        """Return one deferred entry, if present."""
+        deferred = self._data.get("deferred") or {}
+        entry = deferred.get(cooldown_key)
+        return dict(entry) if isinstance(entry, dict) else None
+
+    def due_deferred(self, now: Optional[float] = None) -> list[dict[str, Any]]:
+        """Entries ready to promote: inside preferred hours or past prefer_until."""
+        from datetime import datetime
+
+        current_ts = time.time() if now is None else float(now)
+        current = datetime.fromtimestamp(current_ts)
+        deferred = self._data.get("deferred") or {}
+        due: list[dict[str, Any]] = []
+        for key, entry in list(deferred.items()):
+            if not isinstance(entry, dict):
+                continue
+            hours = [int(h) for h in (entry.get("preferred_hours") or [])]
+            prefer_until = float(entry.get("prefer_until") or 0.0)
+            in_window = current.hour in hours if hours else False
+            expired = prefer_until > 0 and current_ts >= prefer_until
+            if in_window or expired:
+                item = dict(entry)
+                item["cooldown_key"] = key
+                item["force_asap"] = bool(expired and not in_window)
+                due.append(item)
+        return due
+

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Optional
 
 from src.config import Config
@@ -45,14 +46,17 @@ class Router:
             sources = [self._config.idle.target_source, *self._config.idle.fallback_sources]
         return [s for s in sources if s not in SKIP_SOURCES]
 
-    async def handle(self, event: Event) -> list[DeliveryResult]:
+    async def handle(self, event: Event, *, now: datetime | None = None) -> list[DeliveryResult]:
         """Route an event and deliver to resolved session(s)."""
-        reason = self._gate.check(self._state, event)
+        reason = self._gate.check(self._state, event, now=now)
+        if reason is SuppressReason.DEFER_PREFERRED_WINDOW:
+            self._park_deferred(event, now=now)
+            return []
         if reason is not None:
             self._log_suppressed(event, reason)
             return []
 
-        rule = self._gate.resolve_rule(event)
+        rule = self._gate.resolve_rule(event, now=now)
         assert rule is not None
         cooldown_key = self._gate.cooldown_key(event)
 
@@ -73,7 +77,40 @@ class Router:
             success=success_count > 0,
             cooldown_key=cooldown_key,
         )
+        if success_count > 0:
+            self._state.clear_deferred(cooldown_key)
         return results
+
+    def _park_deferred(self, event: Event, *, now: datetime | None = None) -> None:
+        prefer_until = self._gate.prefer_until_ts(event, now=now)
+        rule = self._gate.resolve_rule(event, now=now)
+        hours = list(rule.preferred_window.hours) if rule and rule.preferred_window else []
+        if prefer_until is None:
+            logger.warning(
+                "Event %s deferred without prefer_until — skipping park",
+                event.id,
+            )
+            return
+        key = self._gate.cooldown_key(event)
+        self._state.park_deferred(
+            key,
+            event_type=event.event_type,
+            text=event.text,
+            source=event.source.value if hasattr(event.source, "value") else str(event.source),
+            entry_point=event.entry_point,
+            priority=event.priority,
+            preferred_target=event.preferred_target,
+            preferred_source=event.preferred_source,
+            prefer_until=prefer_until,
+            preferred_hours=hours,
+            metadata=event.metadata,
+            event_id=event.id,
+        )
+        self._gate.log_suppressed(
+            event,
+            SuppressReason.DEFER_PREFERRED_WINDOW,
+            source="router",
+        )
 
     def _log_suppressed(self, event: Event, reason: SuppressReason) -> None:
         cooldown_key = self._gate.cooldown_key(event)
@@ -91,6 +128,8 @@ class Router:
                 event.id,
                 cooldown_key,
             )
+        elif reason is SuppressReason.NUDGE_BUDGET:
+            logger.info("Event %s skipped — nudge budget exceeded", event.id)
 
     @staticmethod
     def _delivery_text(event: Event) -> str:
@@ -123,7 +162,6 @@ class Router:
                 elif session.active:
                     return [session]
                 else:
-                    # /new or resume moved the route; never pin a stale id
                     resolved = await self._registry.find_session_for_source(session.source)
                     if resolved is not None and resolved.source in allowed:
                         if resolved.id != session.id:

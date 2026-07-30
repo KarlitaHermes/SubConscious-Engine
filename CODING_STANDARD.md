@@ -1,28 +1,33 @@
 # SubConscious Engine — Coding Standards
 
-## General Principles
+## General principles
+
 - **Simplicity over complexity** — Every function should do one thing
 - **Explicit over implicit** — No magic, no hidden state
-- **Fail gracefully** — Log errors, don't crash
-- **Minimal dependencies** — Only aiohttp and pyyaml
+- **Fail gracefully** — Log errors, don't crash the loop
+- **Minimal dependencies** — Runtime: aiohttp and pyyaml only
 
-## File Organization
-- Each module in its own file
-- No file longer than 200 lines
-- Clear separation: config, logic, delivery, state
+## File organization
 
-## Naming Conventions
+- One concern per module; package by role: `config/`, `events/`, `sources/`, `router/`, `delivery/`, `checks/`
+- Prefer small files; split when a module grows past ~250 lines unless state/cohesion argues otherwise
+- `app.py` orchestrates only — no routing or source logic there
+
+## Naming conventions
+
 - `snake_case` for functions and variables
 - `PascalCase` for classes
 - `UPPER_CASE` for constants
 - Descriptive names: `is_session_idle()` not `check()`
 
-## Function Signatures
-- Type hints on ALL functions
-- Docstrings on ALL public functions
+## Function signatures
+
+- Type hints on all functions
+- Docstrings on all public functions
 - Return type annotations required
 
 Example:
+
 ```python
 async def is_session_idle(
     state: StateManager,
@@ -41,27 +46,32 @@ async def is_session_idle(
     """
 ```
 
-## Error Handling
+## Error handling
+
 - Catch specific exceptions, not bare `except`
 - Log with context: `logger.error("Failed to inject: %s", exc, exc_info=True)`
 - Never swallow errors silently
-- Use custom exception classes for domain errors
+- Source/consume loops: log and continue; config load: fail fast
 
 ## Logging
-- Use module-level logger: `logger = logging.getLogger(__name__)`
-- INFO for normal operations
-- WARNING for recoverable issues
-- ERROR for failures
-- DEBUG for verbose diagnostics
+
+- Module-level logger: `logger = logging.getLogger(__name__)`
+- INFO for normal operations; WARNING recoverable; ERROR failures; DEBUG diagnostics
 - Never log secrets/tokens
 
 ## Testing
-- Every module has a corresponding test file
-- Tests use pytest with asyncio support
-- Mock external HTTP calls (no real network in tests)
-- Test file naming: `test_<module_name>.py`
 
-## Git Commits
+- Corresponding `tests/test_<area>.py` for non-trivial modules
+- pytest + pytest-asyncio (`asyncio_mode = auto`)
+- Mock external HTTP — no real network or live Telegram injects in unit tests
+- Integration against live sessions only with a dedicated test config/session (see `TODO.md`)
+
+## Public / committed content
+
+Sanitize anything that might land on GitHub (see `.cursor/rules/sanitize-public-content.mdc`): no live config/state, real session IDs, personal paths, or production cron UUIDs.
+
+## Git commits
+
 - One logical change per commit
-- Commit messages: `type: description` (feat, fix, refactor, docs)
-- No commits with "WIP" or "fix fix fix"
+- Messages: `type: description` (feat, fix, refactor, docs, test)
+- No “WIP” or “fix fix fix” commits

@@ -38,6 +38,21 @@ def test_parse_rules_defaults() -> None:
     assert rules[0].event_type == "*"
     assert rules[0].priority == 0
     assert rules[0].active_hours == []
+    assert rules[0].preferred_window is None
+
+
+def test_parse_rules_preferred_window() -> None:
+    rules = parse_rules(
+        [
+            {
+                "event_type": "maintenance",
+                "preferred_window": {"hours": [0, 2, 1], "max_wait_hours": 10},
+            },
+        ],
+    )
+    assert rules[0].preferred_window is not None
+    assert rules[0].preferred_window.hours == (0, 1, 2)
+    assert rules[0].preferred_window.max_wait_hours == 10.0
 
 
 def test_match_rule_exact() -> None:

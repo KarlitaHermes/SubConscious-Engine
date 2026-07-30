@@ -119,6 +119,13 @@ routing:
         max_targets: 1
         cooldown_minutes: 60
         priority: 10
+        # Soft schedule example (omit preferred_window to deliver anytime):
+        # preferred_window:
+        #   hours: [0, 1, 2]      # prefer 00:00–02:59 local
+        #   max_wait_hours: 12    # else ASAP
+        #   fallback: asap
+        # Hard gate (drop outside hours — different from preferred_window):
+        # active_hours: [0, 1, 2]
 
     - name: research
       match:
