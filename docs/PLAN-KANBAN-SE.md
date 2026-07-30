@@ -2,72 +2,55 @@
 
 Status: **parked** — revisit later. Not implemented yet.
 
-## Basic idea
+## Scope (locked)
 
-Build work workflows on the Hermes Kanban board. SE nudges Kanban (create / schedule / unblock cards), not Telegram, for work.
+**Only add** SE’s ability to talk to Kanban via CLI (`hermes kanban create|schedule|unblock|list|show|notify-subscribe`).
 
-Telegram stays for human-facing FYIs only (weather, pending decisions, blocked-need-input). Maintenance, research, vault jobs, and multi-step pipelines live as cards; the Kanban dispatcher spawns workers.
+**Do not** remove or redesign existing SE behavior for v1:
+
+- Keep inject, idle, weather, inbox watcher, preferred_window, acks, notify gate, routing — as they are.
+- Context return for Kanban work prefers **worker → `COMMS/Inbox/` → existing inbox → inject** (no new delivery path required beyond a report contract).
+- OOB Kanban notify is optional, not a replacement for session inject.
 
 ```mermaid
-flowchart TB
-  subgraph today [Today]
-    idle1[SE_idle] --> inject[Inject_Telegram]
-    inject --> skill[Hermes_reads_tasks_md]
-  end
-  subgraph target [Target]
-    idle2[SE_idle_or_sensor] --> cli[hermes_kanban_CLI]
-    cli --> board[Kanban_board]
-    board --> worker[Dispatcher_spawns_worker]
-    sensorFYI[Weather_wake] --> tg[Telegram_FYI_only]
-  end
+flowchart LR
+  seExisting[Existing_SE] --> tg[Telegram_inject]
+  seNew[New_Kanban_CLI_client] --> kb[hermes_kanban]
+  kb -->|inbox_report| inbox[COMMS_Inbox]
+  inbox --> seExisting
 ```
 
-## Hard constraint: no direct DB access
+## Hard constraint
 
-SE must **never** open or write `kanban.db` (or import Hermes `kanban_db`).
+SE never opens `kanban.db`. Subprocess CLI only (dashboard HTTP later only if CLI is insufficient).
 
-Integration surface for v1:
+## Target flow (when wired)
 
-- **Primary:** subprocess `hermes kanban …` (create / schedule / unblock / list / show)
-  - `create --json --idempotency-key … --assignee … --workspace dir:…`
-  - `schedule <id> "overnight"`
-  - `unblock <id>`
-- **Not used:** SQLite paths, Python imports from hermes-agent internals
-- **Later only if CLI is missing something:** documented dashboard HTTP (`/api/plugins/kanban/…`) — still not the DB
+1. SE sensor (or config rule) decides to start work → CLI create/unblock card.
+2. Kanban worker runs; writes report under `COMMS/Inbox/` (agreed prefix); completes.
+3. Existing SE inbox path injects into Telegram session (context preserved).
 
-Thin SE module = CLI wrapper (argv + parse JSON stdout), same spirit as the Adapter HTTP client.
-
-## Split
-
-- **SE:** sensors + gates; nudge Kanban via CLI for work; nudge Telegram only for human messages.
-- **Kanban:** workflows, assignees, `scheduled` / `ready` / `running` / `done`, retries, audit trail.
-
-Kanban `scheduled` parks until something unblocks (SE / cron / human). SE times when to unblock; Kanban runs the work.
-
-`preferred_window` (already shipped) becomes useful as “when to CLI-unblock a scheduled card,” or stays for Telegram FYIs.
+Existing Telegram decision nudges / maintenance injects can keep running until we opt specific workflows onto Kanban triggers — additive, not a big-bang cutover.
 
 ## Thin spike (when we return)
 
-1. Confirm local Kanban live; pick maintenance assignee profile.
-2. Script or SE path: `hermes kanban create --json --idempotency-key se-maint-…` + optional `schedule`; workspace `dir:` vault.
-3. SE flush or cron: `hermes kanban unblock` in night window (or ASAP if missed).
-4. Turn off Telegram maintenance inject / `tasks.md` skill path for that loop.
-5. Success: overnight work runs on the board; Telegram not flooded.
-
-Later: thin `src/delivery/kanban.py` = async subprocess wrapper only.
+1. Add thin `src/delivery/kanban.py` (async subprocess wrapper + tests).
+2. Config knobs: hermes binary path, optional default assignee/board, telegram chat_id only if using notify-subscribe.
+3. One entry/rule or scripted hook that creates a card (prove CLI from SE).
+4. Document inbox report prefix for workers (`kanban-report-*.md` or similar).
+5. Leave all current sources/router/inject paths unchanged.
 
 ## Non-goals for v1
 
-- Opening or writing `kanban.db` from SE
-- Importing Hermes `kanban_db` / internal Python APIs
-- Putting weather / inbox digests on the board (keep Telegram FYI)
-- Deleting `preferred_window`
-- Removing Adapter inject for human messages
+- Removing inject or Adapter client
+- Replacing idle/weather with Kanban
+- Opening `kanban.db`
+- Mandatory cutover of all workflows
 
 ## Checklist when resuming
 
-- [ ] Verify kanban + gateway dispatcher; pick maintenance assignee profile
-- [ ] Spike via CLI only: create/schedule one maintenance card (idempotent, `--json`)
-- [ ] Spike via `hermes kanban unblock` in preferred hours or ASAP
-- [ ] Turn off chat maintenance inject path; update nudges skill/docs
-- [ ] If spike works: `src/delivery/kanban.py` CLI wrapper (never `kanban.db`)
+- [ ] `src/delivery/kanban.py` CLI wrapper + unit tests (mocked subprocess)
+- [ ] Minimal config for kanban CLI
+- [ ] One optional trigger path (feature-flagged / disabled by default)
+- [ ] Inbox report filename contract in docs
+- [ ] No regressions to existing inject/inbox/idle tests
