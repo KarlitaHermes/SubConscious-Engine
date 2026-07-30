@@ -24,7 +24,7 @@ If you are **Hermes** (the Agent receiving injected messages), you also need the
 | Step | Action |
 |------|--------|
 | 1 | Pull this repo (`git pull`) |
-| 2 | Run `./hermes/install-skill.sh` to link skills into `~/.hermes/skills/` (nudges, config, inbox-digest-curator) |
+| 2 | Run `./hermes/install-skill.sh` to link skills into `~/.hermes/skills/` (nudges, config, inbox-digest-curator, kanban-se-bridge) |
 | 3 | Ensure the engine is running with `POST /ack` support (restart after sync) |
 | 4 | On every subconscious injection: read `hermes/subconscious-engine-nudges/SKILL.md` and use `scripts/ack-engine.sh` |
 

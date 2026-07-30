@@ -13,6 +13,7 @@ Sanitized from a Hermes-generated dump. **Paths are as deployed on the reference
 | Adapter source | `~/workspace/subconscious-adapter/` | `__init__.py`, `plugin.yaml` | SubConscious-Adapter |
 | Skill (repo copy) | `~/workspace/subconscious-engine/hermes/` | nudges, config, inbox-digest-curator |
 | Cron + inbox howto | `~/workspace/subconscious-engine/docs/CRON-AND-INBOX.md` | Hermes cron → SE pipeline |
+| Kanban → SE howto | `~/workspace/subconscious-engine/docs/KANBAN-AND-SE.md` | Hermes Kanban → inbox inject |
 | systemd unit (template) | `~/workspace/subconscious-engine/systemd/` | `subconscious-engine.service` | SubConscious-Engine |
 
 ## Runtime only (never commit)

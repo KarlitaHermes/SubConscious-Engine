@@ -8,6 +8,7 @@
 #   ~/.hermes/skills/devops/subconscious-engine-nudges
 #   ~/.hermes/skills/devops/subconscious-engine-config
 #   ~/.hermes/skills/productivity/inbox-digest-curator
+#   ~/.hermes/skills/productivity/kanban-se-bridge
 #
 # Legacy symlink (older paths):
 #   ~/.hermes/skills/subconscious-engine-nudges -> devops/subconscious-engine-nudges
@@ -37,6 +38,7 @@ echo "Installing SubConscious Hermes skills..."
 install_skill devops subconscious-engine-nudges
 install_skill devops subconscious-engine-config
 install_skill productivity inbox-digest-curator
+install_skill productivity kanban-se-bridge
 
 if [[ -x "$REPO_ROOT/hermes/subconscious-engine-nudges/scripts/ack-engine.sh" ]]; then
   chmod +x "$REPO_ROOT/hermes/subconscious-engine-nudges/scripts/ack-engine.sh"
@@ -52,5 +54,6 @@ echo "Done. Optional ~/.hermes/.env:"
 echo "  SUBCONSCIOUS_ENGINE_URL=http://127.0.0.1:8770"
 echo ""
 echo "Cron + inbox howto: docs/CRON-AND-INBOX.md"
+echo "Kanban → SE return: docs/KANBAN-AND-SE.md"
 echo "Test ack:"
 echo "  $REPO_ROOT/hermes/subconscious-engine-nudges/scripts/ack-engine.sh idle_engine in_progress"

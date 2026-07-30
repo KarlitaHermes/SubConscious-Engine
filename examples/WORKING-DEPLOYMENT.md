@@ -32,10 +32,12 @@ These files are **sanitized snapshots** of a real Hermes + SubConscious setup. T
 SubConscious-Engine (this repo)
   └── src/                          # daemon source — systemd runs python -m src
   └── docs/CRON-AND-INBOX.md        # cron → inbox → SE pipeline howto
+  └── docs/KANBAN-AND-SE.md         # Hermes Kanban → SE context return
   └── hermes/                       # Hermes skills (install via install-skill.sh)
       ├── subconscious-engine-nudges/
       ├── subconscious-engine-config/
-      └── inbox-digest-curator/
+      ├── inbox-digest-curator/
+      └── kanban-se-bridge/
   └── examples/working-deployment/  # ← sanitized configs + samples
 
 SubConscious-Adapter (sibling repo)
@@ -82,7 +84,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now subconscious-engine
 ```
 
-**5. Skills** — install all three from this repo:
+**5. Skills** — install from this repo:
 
 ```bash
 chmod +x hermes/install-skill.sh
@@ -94,8 +96,9 @@ chmod +x hermes/install-skill.sh
 | `subconscious-engine-nudges` | ACK protocol, every nudge type |
 | `subconscious-engine-config` | Edit config, restart engine |
 | `inbox-digest-curator` | Cron inbox drops (news, email, research) |
+| `kanban-se-bridge` | Kanban create → `kanban-report-*` → SE inject |
 
-Hermes must run `ack-engine.sh` for notify gate / cooldown coordination. **Cron jobs:** see `docs/CRON-AND-INBOX.md` — use `deliver: local`, write `*.md` to `COMMS/Inbox/`, never deliver digests directly to Telegram.
+Hermes must run `ack-engine.sh` for notify gate / cooldown coordination. **Cron jobs:** see `docs/CRON-AND-INBOX.md` — use `deliver: local`, write `*.md` to `COMMS/Inbox/`, never deliver digests directly to Telegram. **Kanban → session return:** see `docs/KANBAN-AND-SE.md`.
 
 ## Production profile highlights
 

@@ -213,7 +213,7 @@ state:
 
 # Optional Hermes Kanban CLI client (subprocess only — never opens kanban.db).
 # Disabled by default; existing inject/idle/inbox paths are unchanged.
-# See docs/PLAN-KANBAN-SE.md and docs/CRON-AND-INBOX.md (kanban-report-*).
+# See docs/KANBAN-AND-SE.md (Hermes creates cards; SE injects reports).
 kanban:
   enabled: false
   hermes_bin: "hermes"

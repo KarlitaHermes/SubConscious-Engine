@@ -6,7 +6,8 @@ How Hermes **cron jobs** feed the **SubConscious Engine** (SE) instead of messag
 
 - Engine classification: `src/checks/inbox.py`
 - Inbox entry point: `src/sources/inbox_watcher.py`
-- Hermes skills: `hermes/inbox-digest-curator/`, `hermes/subconscious-engine-nudges/`
+- Hermes skills: `hermes/inbox-digest-curator/`, `hermes/subconscious-engine-nudges/`, `hermes/kanban-se-bridge/`
+- Kanban → SE return: `docs/KANBAN-AND-SE.md`
 - Config example: `examples/working-deployment/engine-config.production.yaml` (inbox enabled)
 
 ---
@@ -98,7 +99,9 @@ The engine assigns **disposition** from filename prefix (see `src/checks/inbox.p
 
 ### Kanban worker reports (`kanban-report-`)
 
-When a Hermes Kanban worker finishes work triggered by SE, it should write markdown to `COMMS/Inbox/`:
+**Hermes creates the Kanban card** for User Telegram tasks; the worker writes the report; SE only injects. Full procedure: **`docs/KANBAN-AND-SE.md`** (skill: `hermes/kanban-se-bridge/`).
+
+When the worker finishes, write markdown to `COMMS/Inbox/`:
 
 ```
 kanban-report-<task_id>-YYYY-MM-DD.md
@@ -120,7 +123,7 @@ priority: high
 ...
 ```
 
-SE inbox watcher picks it up and **injects into the Telegram session** (existing path) so Hermes keeps context. Optional Kanban OOB `notify-subscribe` is separate and does not replace this.
+SE inbox watcher picks it up and **injects into the Telegram session** so Hermes keeps context. Optional Kanban OOB `notify-subscribe` is separate and does not replace this.
 
 ---
 
@@ -183,14 +186,16 @@ Install from this repo:
 | `subconscious-engine-nudges` | ACK protocol, all nudge types |
 | `subconscious-engine-config` | Edit `config.yaml`, restart engine, tuning |
 | `inbox-digest-curator` | What to do when inbox nudge arrives |
+| `kanban-se-bridge` | Hermes Kanban create → `kanban-report-*` → SE inject |
 
 **Inbox nudge flow:**
 
 1. `ack-engine.sh inbox:FILENAME in_progress`
 2. **News / research / dream** → sub-agent (`background=true`) to read file, curate, file to vault
-3. **Email** → main session only; verify actionable content with the User before acting (email spoofing)
-4. **Routine** → file to vault, short confirmation
-5. `ack-engine.sh inbox:FILENAME done --minutes 60`
+3. **Kanban report** (`kanban-report-*`) → summarize into session; notify User if useful; file to `Projects/Inbox-Processed/`
+4. **Email** → main session only; verify actionable content with the User before acting (email spoofing)
+5. **Routine** → file to vault, short confirmation
+6. `ack-engine.sh inbox:FILENAME done --minutes 60`
 
 ---
 

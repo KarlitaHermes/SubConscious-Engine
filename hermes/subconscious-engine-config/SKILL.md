@@ -10,6 +10,7 @@ Procedures for `~/.hermes/subconscious-engine/config.yaml`: entry points, routin
 
 **Canonical examples (sanitized):** `examples/working-deployment/` in the subconscious-engine repo  
 **Cron → inbox pipeline:** `docs/CRON-AND-INBOX.md`  
+**Kanban → SE return:** `docs/KANBAN-AND-SE.md` (skill `hermes/kanban-se-bridge/`)  
 **Nudge ACK protocol:** `hermes/subconscious-engine-nudges/SKILL.md`
 
 ---
@@ -170,5 +171,6 @@ cp ~/.hermes/subconscious-engine/config.yaml \
 |-----|--------|
 | `references/nudge-handling.md` | ACK keys by nudge type |
 | `docs/CRON-AND-INBOX.md` | Cron → inbox → SE |
+| `docs/KANBAN-AND-SE.md` | Hermes Kanban → SE inject |
 | `examples/WORKING-DEPLOYMENT.md` | Full deployment map |
 | `UPGRADE-HERMES-version.md` | Upgrade both repos |

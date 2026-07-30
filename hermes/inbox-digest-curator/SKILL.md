@@ -41,6 +41,7 @@ When SubConscious Engine injects **`[SUBCONSCIOUS] New inbox file: <filename>`**
 | `news-digest-` | notify | Sub-agent: curate → notify User |
 | `research-digest-` | notify | Sub-agent: curate → notify User |
 | `dream-session-` | notify | Sub-agent: extract ideas → summary |
+| `kanban-report-` | notify | Fold into session; notify User if useful; file to Inbox-Processed (see `docs/KANBAN-AND-SE.md`) |
 | `email-` | delegate | **Main session only** — see email rules |
 | `memory-`, `knowledge-graph-` | delegate | File to vault, brief OK |
 | frontmatter `priority: high` | notify | Always notify User |

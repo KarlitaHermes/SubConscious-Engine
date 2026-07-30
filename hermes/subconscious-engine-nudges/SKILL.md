@@ -242,7 +242,7 @@ If you already handled an idle nudge (`idle_engine` in progress or done recently
 
 ### 5.5 Inbox — notify (`event_type: inbox_notify`)
 
-**When:** New file in vault `COMMS/Inbox` with notify disposition (e.g. `news-digest-*`, `research-digest-*`, `dream-session-*`, or frontmatter `priority: high`).
+**When:** New file in vault `COMMS/Inbox` with notify disposition (e.g. `news-digest-*`, `research-digest-*`, `dream-session-*`, `kanban-report-*`, or frontmatter `priority: high`).
 
 **Cooldown key:** `inbox:<filename>`
 
@@ -258,6 +258,8 @@ If you already handled an idle nudge (`idle_engine` in progress or done recently
 2. Review content; **notify User** with a concise summary and link/path
 3. File to suggested vault destination if appropriate
 4. `ack-engine.sh inbox:FILENAME done --minutes 60`
+
+**Kanban reports (`kanban-report-*`):** worker results returning to the session. Summarize into context; file under `Projects/Inbox-Processed/`. Creating such cards is Hermes’s job — see `docs/KANBAN-AND-SE.md` and skill `kanban-se-bridge`.
 
 ---
 
