@@ -8,7 +8,7 @@ from typing import Optional
 
 from src.config import Config
 from src.delivery.sessions import SessionInfo, SessionRegistry
-from src.delivery.subconscious import SubConsciousClient
+from src.delivery.subconscious import SubConsciousClient, pick_worker_session
 from src.events.models import DeliveryResult, Event
 from src.notify_gate import NotifyGate, SuppressReason
 from src.router.rules import RouteRule
@@ -75,24 +75,24 @@ class Router:
                 self._state.clear_deferred(cooldown_key)
             return results
 
-        # Sticky Worker (or other) session pin — inject even if not in Face registry.
-        if rule.preferred_session_id:
-            text = self._delivery_text(event)
-            result = await self._delivery.inject_prompt(
-                rule.preferred_session_id,
-                text,
-                adapter_url=rule.inject_url,
-            )
+        # Sticky Worker (or other) session pin — heal if stale/dead.
+        if (
+            rule.preferred_session_id
+            or self._state.worker_preferred_session_id
+            or self._config.worker.preferred_session_id
+        ):
+            results = await self._deliver_preferred(event, rule)
+            success = any(r.success for r in results)
             self._state.record_delivery(
                 event_id=event.id,
                 event_type=event.event_type,
-                session_ids=[result.session_id] if result.success else [],
-                success=result.success,
+                session_ids=[r.session_id for r in results if r.success],
+                success=success,
                 cooldown_key=cooldown_key,
             )
-            if result.success:
+            if success:
                 self._state.clear_deferred(cooldown_key)
-            return [result]
+            return results
 
         targets = await self._resolve_targets(event, rule)
         if not targets:
@@ -118,6 +118,101 @@ class Router:
         if success_count > 0:
             self._state.clear_deferred(cooldown_key)
         return results
+
+    def _preferred_pin(self, rule: RouteRule) -> str:
+        return (
+            self._state.worker_preferred_session_id
+            or rule.preferred_session_id
+            or self._config.worker.preferred_session_id
+            or ""
+        ).strip()
+
+    def _worker_adapter_url(self, rule: RouteRule) -> str:
+        return (
+            (rule.inject_url or "").rstrip("/")
+            or self._config.worker.adapter_url
+            or self._config.adapter.url
+        ).rstrip("/")
+
+    async def _deliver_preferred(
+        self, event: Event, rule: RouteRule
+    ) -> list[DeliveryResult]:
+        """Inject pinned Worker session; on failure re-list / bootstrap and re-pin."""
+        adapter = self._worker_adapter_url(rule)
+        text = self._delivery_text(event)
+        pin = self._preferred_pin(rule)
+
+        if pin:
+            result = await self._delivery.inject_prompt(
+                pin, text, adapter_url=adapter
+            )
+            if result.success:
+                await self._refresh_worker_pin(adapter, fallback=pin)
+                return [result]
+            logger.warning(
+                "Preferred session %s failed (%s) — healing Worker sticky",
+                pin,
+                result.error,
+            )
+        else:
+            logger.warning("No Worker sticky pin — healing")
+
+        healed = await self._heal_worker_session(adapter)
+        if not healed:
+            return [
+                DeliveryResult(
+                    session_id=pin or "worker:unhealed",
+                    success=False,
+                    error="Worker sticky heal failed",
+                )
+            ]
+
+        result = await self._delivery.inject_prompt(
+            healed, text, adapter_url=adapter
+        )
+        if result.success:
+            await self._refresh_worker_pin(adapter, fallback=healed)
+        return [result]
+
+    async def _refresh_worker_pin(self, adapter: str, *, fallback: str) -> None:
+        """After a successful inject, pin the live subconscious/api_server session."""
+        rows = await self._delivery.list_sessions_raw(adapter_url=adapter)
+        live = pick_worker_session(rows) or fallback
+        self._state.set_worker_preferred_session_id(live)
+
+    async def _heal_worker_session(self, adapter: str) -> Optional[str]:
+        """Find or bootstrap a Worker api_server session; never fall back to Face."""
+        rows = await self._delivery.list_sessions_raw(adapter_url=adapter)
+        found = pick_worker_session(rows)
+        if found:
+            logger.info("Healed Worker sticky from adapter list → %s", found)
+            self._state.set_worker_preferred_session_id(found)
+            return found
+
+        worker = self._config.worker
+        api_key = self._config.gateway.api_key
+        if not worker.gateway_url or not api_key:
+            logger.error(
+                "Worker heal: no sessions on %s and gateway bootstrap unavailable",
+                adapter,
+            )
+            return None
+
+        ok = await self._delivery.bootstrap_api_session(
+            worker.gateway_url, api_key
+        )
+        if not ok:
+            return None
+
+        rows = await self._delivery.list_sessions_raw(adapter_url=adapter)
+        found = pick_worker_session(rows)
+        if found:
+            logger.info("Healed Worker sticky via bootstrap → %s", found)
+            self._state.set_worker_preferred_session_id(found)
+            return found
+
+        logger.error("Worker heal: bootstrap ok but /sessions still empty on %s", adapter)
+        return None
 
     async def _run_script(self, event: Event, rule: RouteRule) -> list[DeliveryResult]:
         """Run deliver.script (e.g. start-music-pipeline) as board start."""

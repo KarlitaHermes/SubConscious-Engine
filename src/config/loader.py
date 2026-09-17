@@ -16,6 +16,7 @@ from src.config.models import (
     KanbanConfig,
     LoggingConfig,
     StateConfig,
+    WorkerConfig,
 )
 from src.config.parser import (
     default_routing_rules,
@@ -67,6 +68,7 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     logging_raw = raw.get("logging", {})
     state_raw = raw.get("state", {})
     kanban_raw = raw.get("kanban") or {}
+    worker_raw = raw.get("worker") or {}
 
     return Config(
         gateway=GatewayConfig(url=gateway_url, api_key=api_key),
@@ -102,5 +104,16 @@ def load_config(config_path: Optional[Path] = None) -> Config:
             timeout_seconds=float(kanban_raw.get("timeout_seconds", 60)),
             notify_platform=str(kanban_raw.get("notify_platform", "") or ""),
             notify_chat_id=str(kanban_raw.get("notify_chat_id", "") or ""),
+        ),
+        worker=WorkerConfig(
+            adapter_url=str(
+                worker_raw.get("adapter_url") or "http://127.0.0.1:8772"
+            ).rstrip("/"),
+            gateway_url=str(
+                worker_raw.get("gateway_url") or "http://127.0.0.1:8650"
+            ).rstrip("/"),
+            preferred_session_id=str(
+                worker_raw.get("preferred_session_id") or ""
+            ).strip(),
         ),
     )

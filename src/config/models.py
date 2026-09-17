@@ -33,6 +33,15 @@ class KanbanConfig:
 
 
 @dataclass
+class WorkerConfig:
+    """Karla-Worker sticky SE session (adapter inject + optional API bootstrap)."""
+
+    adapter_url: str = "http://127.0.0.1:8772"
+    gateway_url: str = "http://127.0.0.1:8650"
+    preferred_session_id: str = ""
+
+
+@dataclass
 class IdleConfig:
     threshold_minutes: int
     cooldown_minutes: int
@@ -106,6 +115,7 @@ class Config:
     routing: RoutingConfig
     poll_interval_seconds: int = 60
     kanban: KanbanConfig = field(default_factory=KanbanConfig)
+    worker: WorkerConfig = field(default_factory=WorkerConfig)
 
     @property
     def router(self) -> RoutingConfig:

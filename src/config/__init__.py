@@ -12,6 +12,7 @@ from src.config.models import (
     LoggingConfig,
     RoutingConfig,
     StateConfig,
+    WorkerConfig,
 )
 
 __all__ = [
@@ -27,6 +28,7 @@ __all__ = [
     "LoggingConfig",
     "RoutingConfig",
     "StateConfig",
+    "WorkerConfig",
     "load_config",
     "resolve_config_path",
 ]

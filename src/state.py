@@ -144,6 +144,23 @@ class StateManager:
             self.save()
 
     @property
+    def worker_preferred_session_id(self) -> Optional[str]:
+        """Healed Worker sticky pin (overrides config until cleared)."""
+        val = self._data.get("worker_preferred_session_id")
+        text = str(val).strip() if val is not None else ""
+        return text or None
+
+    def set_worker_preferred_session_id(self, session_id: str) -> None:
+        sid = str(session_id).strip()
+        if not sid:
+            return
+        prev = self.worker_preferred_session_id
+        self._data["worker_preferred_session_id"] = sid
+        self.save()
+        if prev != sid:
+            logger.info("Worker sticky pin → %s (was %s)", sid, prev or "unset")
+
+    @property
     def last_decisions_nudge(self) -> float:
         val = self._data.get("last_decisions_nudge")
         return float(val) if val is not None else 0.0
