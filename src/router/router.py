@@ -60,6 +60,40 @@ class Router:
         assert rule is not None
         cooldown_key = self._gate.cooldown_key(event)
 
+        # Script mode: start a board/pipeline without injecting Face/Worker.
+        if rule.mode == "script" and rule.script:
+            results = await self._run_script(event, rule)
+            success = any(r.success for r in results)
+            self._state.record_delivery(
+                event_id=event.id,
+                event_type=event.event_type,
+                session_ids=[r.session_id for r in results if r.success],
+                success=success,
+                cooldown_key=cooldown_key,
+            )
+            if success:
+                self._state.clear_deferred(cooldown_key)
+            return results
+
+        # Sticky Worker (or other) session pin — inject even if not in Face registry.
+        if rule.preferred_session_id:
+            text = self._delivery_text(event)
+            result = await self._delivery.inject_prompt(
+                rule.preferred_session_id,
+                text,
+                adapter_url=rule.inject_url,
+            )
+            self._state.record_delivery(
+                event_id=event.id,
+                event_type=event.event_type,
+                session_ids=[result.session_id] if result.success else [],
+                success=result.success,
+                cooldown_key=cooldown_key,
+            )
+            if result.success:
+                self._state.clear_deferred(cooldown_key)
+            return [result]
+
         targets = await self._resolve_targets(event, rule)
         if not targets:
             logger.warning("No targets resolved for event %s type=%s", event.id, event.event_type)
@@ -68,7 +102,11 @@ class Router:
         for session in targets:
             self._state.note_active_session(session.source, session.id)
 
-        results = await self._delivery.inject_many(self._delivery_text(event), targets)
+        results = await self._delivery.inject_many(
+            self._delivery_text(event),
+            targets,
+            adapter_url=rule.inject_url,
+        )
         success_count = sum(1 for r in results if r.success)
         self._state.record_delivery(
             event_id=event.id,
@@ -80,6 +118,36 @@ class Router:
         if success_count > 0:
             self._state.clear_deferred(cooldown_key)
         return results
+
+    async def _run_script(self, event: Event, rule: RouteRule) -> list[DeliveryResult]:
+        """Run deliver.script (e.g. start-music-pipeline) as board start."""
+        import asyncio
+        import os
+
+        script = rule.script or ""
+        logger.info("Event %s mode=script → %s", event.id, script)
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                script,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+                start_new_session=True,
+            )
+            # Brief settle — long monitors stay up; immediate crash → fail.
+            await asyncio.sleep(3)
+            if proc.returncode is None:
+                logger.info("Script running (ok): %s pid=%s", script, proc.pid)
+                return [DeliveryResult(session_id=f"script:{event.id}", success=True)]
+            err = ""
+            if proc.stderr:
+                err = (await proc.stderr.read()).decode("utf-8", errors="replace")[:500]
+            if proc.returncode == 0:
+                return [DeliveryResult(session_id=f"script:{event.id}", success=True)]
+            logger.warning("Script failed (%s): %s", proc.returncode, err)
+            return [DeliveryResult(session_id=f"script:{event.id}", success=False, error=err)]
+        except Exception as exc:
+            logger.warning("Script error: %s", exc)
+            return [DeliveryResult(session_id=f"script:{event.id}", success=False, error=str(exc))]
 
     def _park_deferred(self, event: Event, *, now: datetime | None = None) -> None:
         prefer_until = self._gate.prefer_until_ts(event, now=now)

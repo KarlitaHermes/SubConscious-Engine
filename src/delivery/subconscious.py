@@ -44,9 +44,11 @@ class SubConsciousClient:
         text: str,
         *,
         delivery: str = "queue",
+        adapter_url: Optional[str] = None,
     ) -> DeliveryResult:
         """Inject a message into a single session."""
-        url = f"{self._adapter_url}/inject"
+        base = (adapter_url or self._adapter_url).rstrip("/")
+        url = f"{base}/inject"
         payload = {
             "session_id": session_id,
             "text": text,
@@ -57,7 +59,7 @@ class SubConsciousClient:
             async with http.post(url, json=payload) as resp:
                 data = await resp.json()
                 if resp.status == 200 and data.get("ok"):
-                    logger.info("Injected into session %s", session_id)
+                    logger.info("Injected into session %s via %s", session_id, base)
                     return DeliveryResult(session_id=session_id, success=True)
                 error = data.get("error", f"HTTP {resp.status}")
                 logger.warning("Inject failed for %s: %s", session_id, error)
@@ -70,9 +72,13 @@ class SubConsciousClient:
         self,
         text: str,
         sessions: list[SessionInfo],
+        *,
+        adapter_url: Optional[str] = None,
     ) -> list[DeliveryResult]:
         """Inject the same message into multiple sessions concurrently."""
         import asyncio
 
-        tasks = [self.inject_prompt(s.id, text) for s in sessions]
+        tasks = [
+            self.inject_prompt(s.id, text, adapter_url=adapter_url) for s in sessions
+        ]
         return list(await asyncio.gather(*tasks))

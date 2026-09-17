@@ -25,6 +25,13 @@ class RouteRule:
     active_hours: list[int] = field(default_factory=list)
     active_days: list[int] = field(default_factory=list)
     preferred_window: Optional[PreferredWindow] = None
+    # Pin inject to a sticky Hermes session (Karla-Worker SE orchestrator).
+    preferred_session_id: Optional[str] = None
+    # Optional alternate adapter base URL (Worker gateway subconscious port).
+    inject_url: Optional[str] = None
+    # telegram (default) | script — script runs deliver.script instead of inject
+    mode: str = "telegram"
+    script: Optional[str] = None
 
     def is_active_now(self, now: Optional[datetime] = None) -> bool:
         """Return True if the rule is within its configured hard time gate."""
@@ -67,6 +74,22 @@ def parse_rules(raw: list[dict[str, Any]]) -> list[RouteRule]:
                 active_hours=[int(h) for h in (item.get("active_hours") or [])],
                 active_days=[int(d) for d in (item.get("active_days") or [])],
                 preferred_window=PreferredWindow.from_raw(item.get("preferred_window")),
+                preferred_session_id=(
+                    str(item["preferred_session_id"]).strip()
+                    if item.get("preferred_session_id")
+                    else None
+                ),
+                inject_url=(
+                    str(item["inject_url"]).rstrip("/")
+                    if item.get("inject_url")
+                    else None
+                ),
+                mode=str(item.get("mode") or "telegram").strip().lower() or "telegram",
+                script=(
+                    str(item["script"]).strip()
+                    if item.get("script")
+                    else None
+                ),
             )
         )
     return rules
