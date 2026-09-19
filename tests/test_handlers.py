@@ -8,7 +8,11 @@ from pathlib import Path
 import pytest
 
 from src.checks.context import build_vault_context
-from src.checks.inbox import classify_inbox_file, is_standing_file
+from src.checks.inbox import (
+    classify_inbox_file,
+    is_standing_file,
+    parse_inbox_recipient,
+)
 from src.checks.vault_rules import VaultRulesEngine, resolve_rules_path
 from src.events.bus import EventBus
 from src.sources.inbox_watcher import InboxEventSource
@@ -22,12 +26,33 @@ def test_is_standing_file() -> None:
     assert is_standing_file("email-test.md") is False
 
 
+def test_parse_inbox_recipient() -> None:
+    assert parse_inbox_recipient("kanban-report-weather-2026-09-18-19-face.md") == "face"
+    assert parse_inbox_recipient("kanban-report-a4-blocked-2026-09-18-worker.md") == "worker"
+    assert parse_inbox_recipient("kanban-report-a0-2026-09-18-dumb.md") == "dumb"
+    assert parse_inbox_recipient("kanban-report-b3-2026-09-18-musickarla.md") == "musickarla"
+    # Bare name / mid-name "face" is NOT a recipient token
+    assert parse_inbox_recipient("kanban-report-weather-2026-09-18-19.md") == "face"
+    assert parse_inbox_recipient("kanban-report-weather-face-20260918083114.md") == "face"
+    assert parse_inbox_recipient("news-digest-2026-09-18.md") == "face"
+
+
 def test_classify_notify_prefix(tmp_path: Path) -> None:
     path = tmp_path / "news-digest-june.md"
     path.write_text("# digest\n", encoding="utf-8")
     result = classify_inbox_file(path)
     assert result is not None
     assert result.disposition == "notify"
+    assert result.event_type == "inbox_notify"
+    assert result.recipient == "face"
+
+
+def test_classify_recipient_suffix(tmp_path: Path) -> None:
+    path = tmp_path / "kanban-report-music-2026-09-18-worker.md"
+    path.write_text("# music\n", encoding="utf-8")
+    result = classify_inbox_file(path)
+    assert result is not None
+    assert result.recipient == "worker"
     assert result.event_type == "inbox_notify"
 
 
@@ -109,10 +134,13 @@ async def test_inbox_source_publishes_new_file(tmp_path: Path) -> None:
 async def test_inbox_source_skips_already_processed(tmp_path: Path) -> None:
     inbox_dir = tmp_path / "inbox"
     inbox_dir.mkdir()
-    (inbox_dir / "email-test.md").write_text("again", encoding="utf-8")
+    path = inbox_dir / "email-test.md"
+    path.write_text("again", encoding="utf-8")
+    st = path.stat()
+    fingerprint = f"{st.st_mtime_ns}:{st.st_size}"
 
     state = StateManager(tmp_path / "state.yaml")
-    state.mark_file_processed("inbox", "email-test.md")
+    state.mark_file_processed("inbox", "email-test.md", fingerprint)
     entry_point = EntryPoint(id="inbox", type="directory", path=inbox_dir)
     source = InboxEventSource(
         entry_point,
@@ -127,6 +155,36 @@ async def test_inbox_source_skips_already_processed(tmp_path: Path) -> None:
     async for event in bus.consume():
         events.append(event)
     assert events == []
+
+
+@pytest.mark.asyncio
+async def test_inbox_source_renotifies_on_rewrite(tmp_path: Path) -> None:
+    inbox_dir = tmp_path / "inbox"
+    inbox_dir.mkdir()
+    path = inbox_dir / "kanban-report-weather-test.md"
+    path.write_text("first", encoding="utf-8")
+    st = path.stat()
+    fingerprint = f"{st.st_mtime_ns}:{st.st_size}"
+
+    state = StateManager(tmp_path / "state.yaml")
+    state.mark_file_processed("inbox", path.name, fingerprint)
+    entry_point = EntryPoint(
+        id="inbox",
+        type="directory",
+        path=inbox_dir,
+        handle=HandleConfig(handler="inbox", default_event_type="inbox_item"),
+    )
+    source = InboxEventSource(entry_point, state, vault_root=tmp_path)
+
+    path.write_text("second — corrected", encoding="utf-8")
+    bus = EventBus()
+    await source._scan_inbox(bus)
+    bus.close()
+    events = []
+    async for event in bus.consume():
+        events.append(event)
+    assert len(events) == 1
+    assert events[0].event_type == "inbox_notify"
 
 
 @pytest.mark.asyncio

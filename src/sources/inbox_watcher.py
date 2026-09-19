@@ -70,7 +70,12 @@ class InboxEventSource:
         for path in sorted(self._directory.glob("*.md")):
             if not path.is_file():
                 continue
-            if self._state.is_file_processed(self._entry_point.id, path.name):
+            try:
+                st = path.stat()
+                fingerprint = f"{st.st_mtime_ns}:{st.st_size}"
+            except OSError:
+                continue
+            if self._state.is_file_processed(self._entry_point.id, path.name, fingerprint):
                 continue
 
             classification = classify_inbox_file(
@@ -92,6 +97,7 @@ class InboxEventSource:
                     "handler": "inbox",
                     "disposition": classification.disposition,
                     "vault_dest": classification.vault_dest,
+                    "inbox_recipient": classification.recipient,
                 },
             )
             if self._gate is not None:
@@ -105,5 +111,7 @@ class InboxEventSource:
                     )
                     continue
             if await bus.publish(event):
-                self._state.mark_file_processed(self._entry_point.id, path.name)
+                self._state.mark_file_processed(
+                    self._entry_point.id, path.name, fingerprint
+                )
                 logger.info("Inbox event published for %s (%s)", path.name, classification.disposition)

@@ -120,6 +120,21 @@ class IdleEventSource:
             cooldown_key=cooldown_key,
         )
         reason = self._gate.check(self._state, probe)
+        # Windowed tasks (e.g. music 0–5) must not starve idle rotation: if that
+        # specific task is blocked, fall through to plain maintenance/research.
+        if self._gate.blocks_publish(reason) and task_id:
+            assert reason is not None
+            self._gate.log_suppressed(probe, reason, source="idle")
+            task_id = None
+            cooldown_key = IDLE_COOLDOWN_KEY
+            probe = Event(
+                text="",
+                event_type=event_type,
+                source=EventSourceKind.IDLE,
+                entry_point=self._entry_point_id,
+                cooldown_key=cooldown_key,
+            )
+            reason = self._gate.check(self._state, probe)
         if self._gate.blocks_publish(reason):
             assert reason is not None
             self._gate.log_suppressed(probe, reason, source="idle")
@@ -130,7 +145,12 @@ class IdleEventSource:
         recent = self._state.recent_deliveries()
 
         if event_type == "maintenance":
-            text = build_maintenance_prompt(vault, threshold, recent_deliveries=recent)
+            text = build_maintenance_prompt(
+                vault,
+                threshold,
+                recent_deliveries=recent,
+                task_id=task_id,
+            )
         else:
             text = build_research_prompt(vault, threshold, recent_deliveries=recent)
 

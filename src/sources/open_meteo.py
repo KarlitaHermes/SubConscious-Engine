@@ -130,7 +130,10 @@ def _parse_hourly_window(
         f"{alerts_block}"
         f"Hourly:\n" + "\n".join(lines) + "\n\n"
         f"Ride/outdoors: {ride}\n\n"
-        f"Karla: warn Rev only if alerts above are significant; otherwise a brief OK is fine.\n"
+        f"Worker: summarize in a few lines, then WRITE "
+        f"~/vault/COMMS/Inbox/kanban-report-weather-{window_start[:13].replace('T', '-')}-face.md "
+        f"(notify prefix, -face recipient). Do not message Telegram — SE will inbox_notify Face. "
+        f"Ack when the file exists.\n"
         f"Source: Open-Meteo (https://open-meteo.com/)"
     )
 
@@ -188,6 +191,9 @@ def _parse_daily_summary(
         f"  Low: {temp_min}°C\n"
         f"{precip_line}"
         f"  Conditions: {conditions}\n\n"
+        f"Worker: summarize briefly, then WRITE "
+        f"~/vault/COMMS/Inbox/kanban-report-weather-{date}-face.md. "
+        f"SE will inbox_notify Face — do not use Telegram. Ack when the file exists.\n"
         f"Source: Open-Meteo (https://open-meteo.com/)"
     )
 

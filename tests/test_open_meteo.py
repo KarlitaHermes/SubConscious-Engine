@@ -63,6 +63,7 @@ def test_parse_open_meteo_hourly_warsaw() -> None:
     assert event.event_type == "weather"
     assert event.source == EventSourceKind.HTTP_POLL
     assert "Weather next 6h" in event.text
+    assert "kanban-report-weather-" in event.text
     assert "Thunderstorm" in event.text
     assert "Ride/outdoors:" in event.text
     assert event.priority >= 15

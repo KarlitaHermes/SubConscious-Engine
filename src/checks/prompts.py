@@ -30,11 +30,43 @@ def build_maintenance_prompt(
     vault_root: Path,
     threshold_minutes: int,
     recent_deliveries: Optional[list[tuple[str, float]]] = None,
+    *,
+    task_id: Optional[str] = None,
 ) -> str:
-    """Build a maintenance nudge for Karla."""
+    """Build a maintenance nudge for Karla.
+
+    When *task_id* is set (SE-scheduled duty, e.g. ``music_curation``), the
+    prompt names that task and forbids picking a different maintenance item.
+    Untagged nudges keep the free pick-one-due-task behaviour.
+    """
     task_list = vault_root / "Projects" / "Maintenance" / "tasks.md"
     report_dir = vault_root / "Projects" / "Maintenance" / "Reports"
     history = _recent_history_section(recent_deliveries)
+    scheduled = (str(task_id).strip() if task_id else "") or None
+
+    if scheduled:
+        return (
+            f"[SUBCONSCIOUS] System idle detected (no human activity for {threshold_minutes}+ minutes).\n\n"
+            f"{history}"
+            f"SE scheduled task: {scheduled}\n"
+            f"This nudge is NOT a free pick from the task list. Execute task_id=\"{scheduled}\" only.\n\n"
+            f"Task file (procedure / Last done): {task_list}\n"
+            f"Reports directory: {report_dir}\n\n"
+            f"Karla-Worker:\n"
+            f"1. Ack in_progress using the engine-ack footer key.\n"
+            f"2. Look up task_id=\"{scheduled}\" in SOUL / skills / the task file and "
+            f"EXECUTE it now with tools (start the board/script or run the duty). "
+            f"Do not stop at a JSON plan.\n"
+            f"3. Do NOT substitute a different maintenance item "
+            f"(disk, hygiene, research, etc.).\n"
+            f"4. On skip (already running) or failure, write an Inbox "
+            f"kanban-report-…-face.md with the reason, then ack done.\n"
+            f"5. On success start (board/script owns the rest), ack done.\n\n"
+            f"Actions: [execute_task, skip, defer]\n"
+            f"Respond with: "
+            f"{{\"action\": \"...\", \"task_id\": \"{scheduled}\", \"reason\": \"...\"}}"
+        )
+
     return (
         f"[SUBCONSCIOUS] System idle detected (no human activity for {threshold_minutes}+ minutes).\n\n"
         f"{history}"
@@ -44,8 +76,9 @@ def build_maintenance_prompt(
         f"Read the maintenance tasks file. Check the 'Last done' timestamp and cooldown "
         f"for each task. Pick ONE task that is DUE (cooldown has passed). If NO tasks "
         f"are due, write a report saying 'All tasks up to date' and exit. "
-        f"If a task is due, execute it, write a report to the reports directory, "
-        f"and update the 'Last done' timestamp in the task file.\n\n"
+        f"If a task is due, EXECUTE it with tools (do not stop at a JSON plan), write a "
+        f"report to the reports directory, and update the 'Last done' timestamp in the "
+        f"task file.\n\n"
         f"Actions: [execute_task, skip_all, defer]\n"
         f"Respond with: {{\"action\": \"...\", \"task_id\": \"...\", \"reason\": \"...\"}}"
     )

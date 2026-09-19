@@ -212,3 +212,118 @@ def test_asap_when_window_too_far(tmp_path: Path) -> None:
     )
     event = _event(event_type="maintenance", cooldown_key="idle_engine")
     assert gate.check(state, event, now=datetime(2026, 7, 30, 4, 0, 0)) is None
+
+
+def test_preferred_window_overrides_cooldown_at_midnight(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Daily cooldown must not block the first nudge of a new preferred window."""
+    import time as time_mod
+    from datetime import datetime
+
+    now_dt = datetime(2026, 9, 19, 0, 0, 30)
+    monkeypatch.setattr(time_mod, "time", lambda: now_dt.timestamp())
+
+    state = StateManager(tmp_path / "state.yaml")
+    # Yesterday morning delivery still inside 1440m cooldown at midnight.
+    state._data.setdefault("cooldowns", {})["idle_engine:music_curation"] = datetime(
+        2026, 9, 18, 8, 12, 0
+    ).timestamp()
+    state.save()
+
+    gate = _gate(
+        tmp_path,
+        rules=[
+            {
+                "event_type": "maintenance",
+                "task_id": "music_curation",
+                "cooldown_minutes": 1440,
+                "preferred_window": {
+                    "hours": [0, 1, 2, 3, 4, 5],
+                    "max_wait_hours": 12,
+                },
+            },
+        ],
+    )
+    event = _event(
+        event_type="maintenance",
+        task_id="music_curation",
+        cooldown_key="idle_engine:music_curation",
+    )
+    assert gate.check(state, event, now=now_dt) is None
+
+
+def test_cooldown_still_blocks_inside_same_preferred_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cooldown still prevents fast retry within the same night window."""
+    import time as time_mod
+    from datetime import datetime
+
+    now_dt = datetime(2026, 9, 19, 2, 0, 0)
+    monkeypatch.setattr(time_mod, "time", lambda: now_dt.timestamp())
+
+    state = StateManager(tmp_path / "state.yaml")
+    state._data.setdefault("cooldowns", {})["idle_engine:music_curation"] = datetime(
+        2026, 9, 19, 0, 15, 0
+    ).timestamp()
+    state.save()
+
+    gate = _gate(
+        tmp_path,
+        rules=[
+            {
+                "event_type": "maintenance",
+                "task_id": "music_curation",
+                "cooldown_minutes": 1440,
+                "preferred_window": {
+                    "hours": [0, 1, 2, 3, 4, 5],
+                    "max_wait_hours": 12,
+                },
+            },
+        ],
+    )
+    event = _event(
+        event_type="maintenance",
+        task_id="music_curation",
+        cooldown_key="idle_engine:music_curation",
+    )
+    assert gate.check(state, event, now=now_dt) is SuppressReason.COOLDOWN
+
+
+def test_cooldown_blocks_outside_preferred_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Outside preferred hours, cooldown behaves normally."""
+    import time as time_mod
+    from datetime import datetime
+
+    now_dt = datetime(2026, 9, 18, 20, 0, 0)
+    monkeypatch.setattr(time_mod, "time", lambda: now_dt.timestamp())
+
+    state = StateManager(tmp_path / "state.yaml")
+    state._data.setdefault("cooldowns", {})["idle_engine:music_curation"] = datetime(
+        2026, 9, 18, 8, 12, 0
+    ).timestamp()
+    state.save()
+
+    gate = _gate(
+        tmp_path,
+        rules=[
+            {
+                "event_type": "maintenance",
+                "task_id": "music_curation",
+                "cooldown_minutes": 1440,
+                "preferred_window": {
+                    "hours": [0, 1, 2, 3, 4, 5],
+                    "max_wait_hours": 12,
+                },
+            },
+        ],
+    )
+    event = _event(
+        event_type="maintenance",
+        task_id="music_curation",
+        cooldown_key="idle_engine:music_curation",
+    )
+    assert gate.check(state, event, now=now_dt) is SuppressReason.COOLDOWN

@@ -66,12 +66,22 @@ class StateManager:
 
     def is_in_cooldown(self, cooldown_minutes: int, key: str = "default") -> bool:
         """Check if a cooldown key is still active."""
-        cooldowns = self._data.setdefault("cooldowns", {})
-        last = cooldowns.get(key)
+        last = self.cooldown_timestamp(key)
         if last is None:
             return False
         elapsed = time.time() - float(last)
         return elapsed < cooldown_minutes * 60
+
+    def cooldown_timestamp(self, key: str = "default") -> Optional[float]:
+        """Return the last successful delivery/ack timestamp for *key*, if any."""
+        cooldowns = self._data.get("cooldowns") or {}
+        raw = cooldowns.get(key)
+        if raw is None:
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
 
     def record_delivery(
         self,
@@ -179,17 +189,43 @@ class StateManager:
         val = self._data.get("last_trigger")
         return float(val) if val is not None else None
 
-    def is_file_processed(self, entry_point_id: str, filename: str) -> bool:
-        """Return True if an inbox/directory file was already emitted."""
-        processed = self._data.setdefault("processed_files", {})
-        entry = processed.get(entry_point_id, {})
-        return filename in entry
+    def is_file_processed(
+        self,
+        entry_point_id: str,
+        filename: str,
+        fingerprint: str | None = None,
+    ) -> bool:
+        """Return True if this file+fingerprint was already emitted.
 
-    def mark_file_processed(self, entry_point_id: str, filename: str) -> None:
+        Fingerprint is typically ``f\"{mtime_ns}:{size}\"``. Legacy state stored
+        a float timestamp — those entries are adopted to the current fingerprint
+        once (no backlog re-notify). A later rewrite with a new fingerprint
+        re-notifies.
+        """
+        processed = self._data.setdefault("processed_files", {})
+        entry = processed.setdefault(entry_point_id, {})
+        if filename not in entry:
+            return False
+        if fingerprint is None:
+            return True
+        stored = entry[filename]
+        if isinstance(stored, str):
+            return stored == fingerprint
+        # Legacy float timestamp: adopt fingerprint, stay suppressed.
+        entry[filename] = fingerprint
+        self.save()
+        return True
+
+    def mark_file_processed(
+        self,
+        entry_point_id: str,
+        filename: str,
+        fingerprint: str | None = None,
+    ) -> None:
         """Record that a directory file has been published as an event."""
         processed = self._data.setdefault("processed_files", {})
         entry_files = processed.setdefault(entry_point_id, {})
-        entry_files[filename] = time.time()
+        entry_files[filename] = fingerprint if fingerprint is not None else time.time()
         self.save()
 
     @property

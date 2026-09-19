@@ -103,13 +103,67 @@ async def test_idle_alternates_maintenance_and_research(tmp_path: Path) -> None:
     assert state.idle_trigger_count == 2
 
 
-def test_next_idle_event_type_alternation(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_idle_falls_through_when_music_on_cooldown(tmp_path: Path) -> None:
+    """Music preferred-window cooldown must not block other idle maintenance."""
+    import time
+
+    vault = tmp_path / "vault"
+    tasks = vault / "Projects" / "Maintenance"
+    tasks.mkdir(parents=True)
+    (tasks / "tasks.md").write_text(
+        "- [ ] Daily music curation — Last done: never\n",
+        encoding="utf-8",
+    )
+
+    config = make_config(
+        tmp_path,
+        idle_enabled=True,
+        rules=[
+            {
+                "event_type": "maintenance",
+                "task_id": "music_curation",
+                "cooldown_minutes": 1440,
+                "preferred_window": {"hours": [0, 1, 2, 3, 4, 5], "max_wait_hours": 12},
+                "target_sources": ["telegram"],
+            },
+            {
+                "event_type": "maintenance",
+                "cooldown_minutes": 120,
+                "target_sources": ["telegram"],
+            },
+            {
+                "event_type": "research",
+                "cooldown_minutes": 120,
+                "target_sources": ["telegram"],
+            },
+        ],
+    )
+    config.idle.vault_root = vault
     state = StateManager(tmp_path / "state.yaml")
-    assert state.next_idle_event_type() == "maintenance"
-    state.record_idle_trigger()
-    assert state.next_idle_event_type() == "research"
-    state.record_idle_trigger()
-    assert state.next_idle_event_type() == "maintenance"
+    # Yesterday-morning music delivery still inside 1440m cooldown.
+    state._data.setdefault("cooldowns", {})["idle_engine:music_curation"] = time.time() - 8 * 3600
+    state.save()
+
+    registry = AsyncMock()
+    session = MagicMock()
+    session.id = "sess_1"
+    session.source = "telegram"
+    registry.find_session_for_source.return_value = session
+
+    bus = EventBus()
+    source = IdleEventSource(config, registry, state)
+
+    with patch("src.sources.idle.get_last_human_activity", return_value=None):
+        await source._evaluate(bus)
+
+    bus.close()
+    published = [e async for e in bus.consume()]
+    assert len(published) == 1
+    assert published[0].event_type == "maintenance"
+    assert published[0].task_id is None
+    assert published[0].cooldown_key == "idle_engine"
+    assert state.idle_trigger_count == 1
 
 
 @pytest.mark.asyncio

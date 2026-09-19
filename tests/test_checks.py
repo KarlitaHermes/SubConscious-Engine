@@ -58,6 +58,32 @@ def test_build_maintenance_prompt_includes_task_path(tmp_path: Path) -> None:
     assert "[SUBCONSCIOUS]" in text
     assert "Maintenance/tasks.md" in text
     assert "Actions: [execute_task, skip_all, defer]" in text
+    assert "free pick" not in text
+
+
+def test_build_maintenance_prompt_directed_task_id(tmp_path: Path) -> None:
+    text = build_maintenance_prompt(
+        tmp_path,
+        threshold_minutes=30,
+        task_id="music_curation",
+    )
+    assert 'SE scheduled task: music_curation' in text
+    assert 'Execute task_id="music_curation" only' in text
+    assert "Do NOT substitute a different maintenance item" in text
+    assert "Do not stop at a JSON plan" in text
+    assert '"task_id": "music_curation"' in text
+    # Must not look like the free-pick prompt.
+    assert "Pick ONE task that is DUE" not in text
+
+
+def test_build_maintenance_prompt_directed_any_task_id(tmp_path: Path) -> None:
+    text = build_maintenance_prompt(
+        tmp_path,
+        threshold_minutes=60,
+        task_id="vault_hygiene",
+    )
+    assert "SE scheduled task: vault_hygiene" in text
+    assert 'task_id="vault_hygiene"' in text
 
 
 def test_build_research_prompt_includes_research_path(tmp_path: Path) -> None:

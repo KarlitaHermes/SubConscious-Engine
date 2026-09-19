@@ -32,6 +32,9 @@ class RouteRule:
     # telegram (default) | script — script runs deliver.script instead of inject
     mode: str = "telegram"
     script: Optional[str] = None
+    # After a successful Worker inject, also drop a notify file in COMMS/Inbox
+    # so Face gets inbox_notify even when the cheap lane won't tool-write.
+    inbox_report: bool = False
 
     def is_active_now(self, now: Optional[datetime] = None) -> bool:
         """Return True if the rule is within its configured hard time gate."""
@@ -90,6 +93,7 @@ def parse_rules(raw: list[dict[str, Any]]) -> list[RouteRule]:
                     if item.get("script")
                     else None
                 ),
+                inbox_report=bool(item.get("inbox_report", False)),
             )
         )
     return rules

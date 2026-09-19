@@ -24,6 +24,10 @@ STANDING_FILENAMES = frozenset(
 
 SKIP_PREFIXES = ("dream-task-", "researcher-task-", "quick-wins-")
 NOTIFY_PREFIXES = ("news-digest-", "research-digest-", "dream-session-", "kanban-report-")
+# Trailing -face|-worker|-dumb|-musickarla before .md selects inject target.
+# Bare names (no suffix) default to Face. See vault/COMMS/README.md.
+INBOX_RECIPIENTS = frozenset({"face", "worker", "dumb", "musickarla"})
+DEFAULT_INBOX_RECIPIENT = "face"
 EMAIL_PREFIXES = ("email-",)
 
 VAULT_DEST_BY_PREFIX: tuple[tuple[str, str], ...] = (
@@ -47,6 +51,22 @@ class InboxClassification:
     vault_dest: str
     priority: int = 0
     event_type: str = "inbox_item"
+    recipient: str = DEFAULT_INBOX_RECIPIENT
+
+
+def parse_inbox_recipient(filename: str) -> str:
+    """Return recipient token from ``…-<recipient>.md``, else Face.
+
+    Only the last ``-<token>`` before ``.md`` counts. Mid-name tokens like
+    ``kanban-report-weather-face-20260918.md`` are NOT recipients.
+    """
+    stem = filename[:-3] if filename.lower().endswith(".md") else filename
+    if "-" not in stem:
+        return DEFAULT_INBOX_RECIPIENT
+    token = stem.rsplit("-", 1)[-1].lower()
+    if token in INBOX_RECIPIENTS:
+        return token
+    return DEFAULT_INBOX_RECIPIENT
 
 
 def read_frontmatter(path: Path) -> tuple[dict[str, Any], str]:
@@ -96,6 +116,7 @@ def classify_inbox_file(path: Path, *, default_event_type: str = "inbox_item") -
 
     metadata, _body = read_frontmatter(path)
     vault_dest = vault_dest_relative(filename)
+    recipient = parse_inbox_recipient(filename)
 
     priority = 0
     event_type = default_event_type
@@ -104,6 +125,10 @@ def classify_inbox_file(path: Path, *, default_event_type: str = "inbox_item") -
         if raw_priority == "high":
             priority = 10
             event_type = "inbox_notify"
+        # Optional frontmatter override: to: face|worker|dumb|musickarla
+        raw_to = str(metadata.get("to", "")).strip().lower()
+        if raw_to in INBOX_RECIPIENTS:
+            recipient = raw_to
 
     if any(filename.startswith(prefix) for prefix in NOTIFY_PREFIXES):
         return InboxClassification(
@@ -112,6 +137,7 @@ def classify_inbox_file(path: Path, *, default_event_type: str = "inbox_item") -
             vault_dest=vault_dest,
             priority=max(priority, 10),
             event_type="inbox_notify",
+            recipient=recipient,
         )
 
     if any(filename.startswith(prefix) for prefix in EMAIL_PREFIXES):
@@ -121,6 +147,7 @@ def classify_inbox_file(path: Path, *, default_event_type: str = "inbox_item") -
             vault_dest=vault_dest,
             priority=priority,
             event_type=default_event_type,
+            recipient=recipient,
         )
 
     routine_prefixes = ("memory-", "knowledge-graph-", "inbox-")
@@ -131,6 +158,7 @@ def classify_inbox_file(path: Path, *, default_event_type: str = "inbox_item") -
             vault_dest=vault_dest,
             priority=priority,
             event_type=default_event_type,
+            recipient=recipient,
         )
 
     return InboxClassification(
@@ -139,6 +167,7 @@ def classify_inbox_file(path: Path, *, default_event_type: str = "inbox_item") -
         vault_dest=vault_dest,
         priority=priority,
         event_type=default_event_type,
+        recipient=recipient,
     )
 
 
@@ -153,6 +182,7 @@ def build_inbox_prompt(path: Path, classification: InboxClassification, vault_ro
     return (
         f"[SUBCONSCIOUS] New inbox file: {classification.filename}\n\n"
         f"Disposition: {classification.disposition}\n"
+        f"Recipient: {classification.recipient}\n"
         f"Suggested vault destination: {dest}\n\n"
         f"Karla: review this inbox drop. Classify as notify Rev, file to vault, "
         f"delegate to a sub-agent, or mark as routine. Content:\n\n"

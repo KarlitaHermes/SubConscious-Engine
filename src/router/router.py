@@ -60,6 +60,30 @@ class Router:
         assert rule is not None
         cooldown_key = self._gate.cooldown_key(event)
 
+        # Inbox recipient suffix (-face|-worker|…) overrides default Face inject.
+        if event.event_type in ("inbox_notify", "inbox_item"):
+            recipient = str((event.metadata or {}).get("inbox_recipient") or "face")
+            if recipient == "worker":
+                results = await self._deliver_inbox_worker(event)
+                success = any(r.success for r in results)
+                self._state.record_delivery(
+                    event_id=event.id,
+                    event_type=event.event_type,
+                    session_ids=[r.session_id for r in results if r.success],
+                    success=success,
+                    cooldown_key=cooldown_key,
+                )
+                if success:
+                    self._state.clear_deferred(cooldown_key)
+                return results
+            if recipient in ("dumb", "musickarla"):
+                # No dedicated subconscious adapters yet — page Face with a note.
+                logger.info(
+                    "Inbox recipient %s has no adapter; delivering to Face (%s)",
+                    recipient,
+                    event.id,
+                )
+
         # Script mode: start a board/pipeline without injecting Face/Worker.
         if rule.mode == "script" and rule.script:
             results = await self._run_script(event, rule)
@@ -75,14 +99,14 @@ class Router:
                 self._state.clear_deferred(cooldown_key)
             return results
 
-        # Sticky Worker (or other) session pin — heal if stale/dead.
-        if (
-            rule.preferred_session_id
-            or self._state.worker_preferred_session_id
-            or self._config.worker.preferred_session_id
-        ):
+        # Sticky Worker session pin — only when the rule asks for it.
+        # Do NOT route Face telegram (e.g. inbox_notify) through Worker just
+        # because a worker_preferred_session_id is set in state.
+        if rule.preferred_session_id:
             results = await self._deliver_preferred(event, rule)
             success = any(r.success for r in results)
+            if success and rule.inbox_report:
+                self._write_inbox_report(event)
             self._state.record_delivery(
                 event_id=event.id,
                 event_type=event.event_type,
@@ -295,12 +319,65 @@ class Router:
         elif reason is SuppressReason.NUDGE_BUDGET:
             logger.info("Event %s skipped — nudge budget exceeded", event.id)
 
+    async def _deliver_inbox_worker(self, event: Event) -> list[DeliveryResult]:
+        """Inject an Inbox notify into the Worker sticky session."""
+        rule = RouteRule(
+            event_type=event.event_type,
+            target_sources=["api_server"],
+            preferred_session_id=(
+                self._state.worker_preferred_session_id
+                or self._config.worker.preferred_session_id
+                or None
+            ),
+            inject_url=self._config.worker.adapter_url or None,
+        )
+        return await self._deliver_preferred(event, rule)
+
     @staticmethod
     def _delivery_text(event: Event) -> str:
         """Append ack hint so Hermes knows which cooldown_key to confirm."""
         if not event.cooldown_key:
             return event.text
         return f"{event.text}\n\n[engine-ack:{event.cooldown_key}|in_progress,done]"
+
+    def _write_inbox_report(self, event: Event) -> None:
+        """Drop a notify-prefixed Inbox file so Face is paged via inbox_notify."""
+        from pathlib import Path
+
+        inbox = None
+        for ep in self._config.entry_points:
+            if ep.type == "directory" and getattr(ep.handle, "handler", None) == "inbox":
+                raw = ep.path
+                inbox = Path(raw).expanduser() if raw is not None else None
+                break
+        if inbox is None:
+            inbox = Path.home() / "vault" / "COMMS" / "Inbox"
+        try:
+            inbox.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            logger.warning("Inbox report mkdir failed: %s", exc)
+            return
+
+        window = (event.metadata or {}).get("window_start") or (event.metadata or {}).get("date") or ""
+        stamp = str(window)[:13].replace("T", "-") if window else event.id[:12]
+        kind = event.event_type or "report"
+        path = inbox / f"kanban-report-{kind}-{stamp}-face.md"
+        # Strip Worker-only instructions; Face only needs the outlook body.
+        body_lines = []
+        for line in event.text.splitlines():
+            if line.startswith("Worker:"):
+                break
+            body_lines.append(line)
+        body = "\n".join(body_lines).strip() or event.text.strip()
+        try:
+            path.write_text(
+                f"# {kind} report\n\n{body}\n\n"
+                f"_SE inbox_report after Worker nudge (event {event.id})._\n",
+                encoding="utf-8",
+            )
+            logger.info("Inbox report written: %s", path)
+        except OSError as exc:
+            logger.warning("Inbox report write failed: %s", exc)
 
     async def _resolve_targets(self, event: Event, rule: RouteRule) -> list[SessionInfo]:
         """Resolve target sessions from explicit IDs, hints, and rules."""

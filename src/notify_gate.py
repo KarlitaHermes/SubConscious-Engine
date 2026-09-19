@@ -11,7 +11,11 @@ from src.config import Config
 from src.config.models import EntryPoint
 from src.events.models import Event, EventSourceKind
 from src.router.rules import RouteRule, parse_rules, select_rule
-from src.router.window import FORCE_ASAP_META, should_defer_for_preferred_window
+from src.router.window import (
+    FORCE_ASAP_META,
+    should_defer_for_preferred_window,
+    window_bounds_containing,
+)
 from src.state import StateManager
 
 logger = logging.getLogger(__name__)
@@ -67,7 +71,13 @@ class NotifyGate:
             return SuppressReason.IN_PROGRESS
 
         if state.is_in_cooldown(cooldown_minutes, key=cooldown_key):
-            return SuppressReason.COOLDOWN
+            # Preferred window beats cooldown: once a new window opens (e.g. midnight
+            # for hours 0–5), allow the nudge even if the daily cooldown has not
+            # elapsed. Cooldown still blocks fast retries *inside* the same window.
+            if not self._new_preferred_window_overrides_cooldown(
+                state, rule, cooldown_key, now=now
+            ):
+                return SuppressReason.COOLDOWN
 
         budget = self._config.idle.nudge_budget_per_hour
         if budget > 0 and state.nudge_count_window(3600) >= budget:
@@ -84,6 +94,34 @@ class NotifyGate:
                 return SuppressReason.DEFER_PREFERRED_WINDOW
 
         return None
+
+    @staticmethod
+    def _new_preferred_window_overrides_cooldown(
+        state: StateManager,
+        rule: RouteRule,
+        cooldown_key: str,
+        *,
+        now: Optional[datetime] = None,
+    ) -> bool:
+        """True when we are inside preferred hours and last fire was before this window."""
+        if rule.preferred_window is None:
+            return False
+        current = now or datetime.now()
+        bounds = window_bounds_containing(current, rule.preferred_window.hours)
+        if bounds is None:
+            return False
+        window_start, _window_end = bounds
+        last = state.cooldown_timestamp(cooldown_key)
+        if last is None:
+            return False
+        if float(last) < window_start.timestamp():
+            logger.info(
+                "Cooldown %s: preferred window started %.0f — ignoring prior cooldown",
+                cooldown_key,
+                window_start.timestamp(),
+            )
+            return True
+        return False
 
     @staticmethod
     def blocks_publish(reason: Optional[SuppressReason]) -> bool:
