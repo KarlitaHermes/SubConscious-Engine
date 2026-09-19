@@ -57,8 +57,9 @@ def test_build_maintenance_prompt_includes_task_path(tmp_path: Path) -> None:
     text = build_maintenance_prompt(tmp_path, threshold_minutes=30)
     assert "[SUBCONSCIOUS]" in text
     assert "Maintenance/tasks.md" in text
-    assert "Actions: [execute_task, skip_all, defer]" in text
-    assert "free pick" not in text
+    assert "Tools first" in text or "tools first" in text.lower()
+    assert "Respond with:" not in text
+    assert '{"action"' not in text
 
 
 def test_build_maintenance_prompt_directed_task_id(tmp_path: Path) -> None:
@@ -67,12 +68,11 @@ def test_build_maintenance_prompt_directed_task_id(tmp_path: Path) -> None:
         threshold_minutes=30,
         task_id="music_curation",
     )
-    assert 'SE scheduled task: music_curation' in text
-    assert 'Execute task_id="music_curation" only' in text
-    assert "Do NOT substitute a different maintenance item" in text
-    assert "Do not stop at a JSON plan" in text
-    assert '"task_id": "music_curation"' in text
-    # Must not look like the free-pick prompt.
+    assert "SE scheduled task: music_curation" in text
+    assert "start-music-pipeline.sh" in text
+    assert "Do not stop at a plan" in text
+    assert "Respond with:" not in text
+    assert '{"action"' not in text
     assert "Pick ONE task that is DUE" not in text
 
 
@@ -84,9 +84,22 @@ def test_build_maintenance_prompt_directed_any_task_id(tmp_path: Path) -> None:
     )
     assert "SE scheduled task: vault_hygiene" in text
     assert 'task_id="vault_hygiene"' in text
+    assert "Respond with:" not in text
 
 
 def test_build_research_prompt_includes_research_path(tmp_path: Path) -> None:
     text = build_research_prompt(tmp_path, threshold_minutes=30)
     assert "[SUBCONSCIOUS]" in text
     assert "web-research-tasks.md" in text
+    assert "Respond with:" not in text
+    assert "tools first" in text.lower()
+
+
+def test_build_pending_decisions_prompt_no_json_schema(tmp_path: Path) -> None:
+    reports = tmp_path / "Projects" / "Maintenance" / "Reports"
+    reports.mkdir(parents=True)
+    (reports / "r.md").write_text("ACTION REQUIRED: pick a color\n", encoding="utf-8")
+    prompt = build_pending_decisions_prompt(tmp_path, idle_minutes=35.0)
+    assert prompt is not None
+    assert "Respond with:" not in prompt
+    assert "Tools first" in prompt or "tools first" in prompt.lower()

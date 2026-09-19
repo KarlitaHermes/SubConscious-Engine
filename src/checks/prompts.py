@@ -7,6 +7,9 @@ from typing import Optional
 
 from src.checks.decisions import get_pending_decisions
 
+_MUSIC_SCRIPT = "/home/karla/projects/karla-music/scripts/start-music-pipeline.sh"
+_ACK = "ack-engine.sh with the engine-ack footer key"
+
 
 def _recent_history_section(
     recent_deliveries: Optional[list[tuple[str, float]]] = None,
@@ -38,33 +41,48 @@ def build_maintenance_prompt(
     When *task_id* is set (SE-scheduled duty, e.g. ``music_curation``), the
     prompt names that task and forbids picking a different maintenance item.
     Untagged nudges keep the free pick-one-due-task behaviour.
+
+    Never end with a JSON schema — cheap models treat that as the final answer
+    and skip tools. Match weather: name concrete actions/paths.
     """
     task_list = vault_root / "Projects" / "Maintenance" / "tasks.md"
     report_dir = vault_root / "Projects" / "Maintenance" / "Reports"
     history = _recent_history_section(recent_deliveries)
     scheduled = (str(task_id).strip() if task_id else "") or None
 
+    if scheduled == "music_curation":
+        return (
+            f"[SUBCONSCIOUS] System idle detected (no human activity for {threshold_minutes}+ minutes).\n\n"
+            f"{history}"
+            f"SE scheduled task: music_curation\n"
+            f"This is NOT a free pick. Do not run disk/hygiene/other maintenance.\n\n"
+            f"Worker:\n"
+            f"1. Ack in_progress ({_ACK}).\n"
+            f"2. If a live Karla Music board/monitor is already running: WRITE "
+            f"~/vault/COMMS/Inbox/kanban-report-music-YYYY-MM-DD-face.md with reason "
+            f"`already running`, then ack done.\n"
+            f"3. Otherwise start `{_MUSIC_SCRIPT}` in background (terminal). "
+            f"Script monitor owns success/block Inbox `-face` report.\n"
+            f"4. If start fails: WRITE Inbox `…-face.md` with the failure, ack done.\n"
+            f"5. Do not stop at a plan. Use tools before any summary.\n"
+        )
+
     if scheduled:
         return (
             f"[SUBCONSCIOUS] System idle detected (no human activity for {threshold_minutes}+ minutes).\n\n"
             f"{history}"
             f"SE scheduled task: {scheduled}\n"
-            f"This nudge is NOT a free pick from the task list. Execute task_id=\"{scheduled}\" only.\n\n"
-            f"Task file (procedure / Last done): {task_list}\n"
+            f"This nudge is NOT a free pick. Execute task_id=\"{scheduled}\" only.\n\n"
+            f"Task file: {task_list}\n"
             f"Reports directory: {report_dir}\n\n"
-            f"Karla-Worker:\n"
-            f"1. Ack in_progress using the engine-ack footer key.\n"
-            f"2. Look up task_id=\"{scheduled}\" in SOUL / skills / the task file and "
-            f"EXECUTE it now with tools (start the board/script or run the duty). "
-            f"Do not stop at a JSON plan.\n"
-            f"3. Do NOT substitute a different maintenance item "
-            f"(disk, hygiene, research, etc.).\n"
-            f"4. On skip (already running) or failure, write an Inbox "
-            f"kanban-report-…-face.md with the reason, then ack done.\n"
-            f"5. On success start (board/script owns the rest), ack done.\n\n"
-            f"Actions: [execute_task, skip, defer]\n"
-            f"Respond with: "
-            f"{{\"action\": \"...\", \"task_id\": \"{scheduled}\", \"reason\": \"...\"}}"
+            f"Worker:\n"
+            f"1. Ack in_progress ({_ACK}).\n"
+            f"2. Look up task_id=\"{scheduled}\" in SOUL / the task file and EXECUTE it "
+            f"now with tools (script, terminal, vault_write). Do not stop at a plan.\n"
+            f"3. Do NOT substitute a different maintenance item.\n"
+            f"4. On skip/failure: WRITE ~/vault/COMMS/Inbox/kanban-report-…-face.md "
+            f"with the reason, then ack done.\n"
+            f"5. On success (or successful board start): ack done.\n"
         )
 
     return (
@@ -72,15 +90,15 @@ def build_maintenance_prompt(
         f"{history}"
         f"Task file: {task_list}\n"
         f"Reports directory: {report_dir}\n\n"
-        f"Karla: spawn a sub-agent with this instruction:\n\n"
-        f"Read the maintenance tasks file. Check the 'Last done' timestamp and cooldown "
-        f"for each task. Pick ONE task that is DUE (cooldown has passed). If NO tasks "
-        f"are due, write a report saying 'All tasks up to date' and exit. "
-        f"If a task is due, EXECUTE it with tools (do not stop at a JSON plan), write a "
-        f"report to the reports directory, and update the 'Last done' timestamp in the "
-        f"task file.\n\n"
-        f"Actions: [execute_task, skip_all, defer]\n"
-        f"Respond with: {{\"action\": \"...\", \"task_id\": \"...\", \"reason\": \"...\"}}"
+        f"Worker:\n"
+        f"1. Ack in_progress ({_ACK}).\n"
+        f"2. Read the task file with tools. Pick ONE task that is DUE "
+        f"(Last done / cooldown elapsed).\n"
+        f"3. EXECUTE that task with tools now (script, terminal, vault_write). "
+        f"Update Last done and WRITE a report under {report_dir} "
+        f"(and Inbox …-face.md when Face must know).\n"
+        f"4. If nothing is due: WRITE a short 'All tasks up to date' report, ack done.\n"
+        f"5. Do not stop at a plan or JSON. Tools first, then a one-line summary.\n"
     )
 
 
@@ -96,19 +114,19 @@ def build_research_prompt(
     history = _recent_history_section(recent_deliveries)
     return (
         f"[SUBCONSCIOUS] System idle detected (no human activity for {threshold_minutes}+ minutes).\n\n"
-        f"No pending maintenance tasks scheduled this cycle. Time for self-improvement research.\n\n"
+        f"No pending maintenance this cycle — self-improvement research.\n\n"
         f"{history}"
         f"Research context:\n"
         f"- Web research topics: {task_list}\n"
         f"- DREAM suggestions: {dream_journal}\n"
-        f"- Reports directory (check existing reports first): {report_dir}\n\n"
-        f"Karla: spawn a sub-agent with this instruction:\n\n"
-        f"Check the reports directory for recent research (last 48h). If a research topic "
-        f"was already covered recently, skip it. Pick ONE new topic from the web research "
-        f"tasks file or DREAM journal. Research it thoroughly and write findings to the "
-        f"reports directory. Only flag something for Rev if it's genuinely interesting or urgent.\n\n"
-        f"Actions: [research_topic, skip_all, flag_for_rev]\n"
-        f"Respond with: {{\"action\": \"...\", \"topic\": \"...\", \"reason\": \"...\"}}"
+        f"- Reports directory: {report_dir}\n\n"
+        f"Worker:\n"
+        f"1. Ack in_progress ({_ACK}).\n"
+        f"2. Check {report_dir} for research in the last 48h; skip duplicates.\n"
+        f"3. Pick ONE new topic from the research tasks or DREAM journal; research it "
+        f"with tools; WRITE findings under {report_dir}.\n"
+        f"4. If Face/Rev must know: WRITE ~/vault/COMMS/Inbox/research-digest-YYYY-MM-DD-face.md.\n"
+        f"5. Ack done. Do not stop at a plan or JSON — tools first.\n"
     )
 
 
@@ -127,13 +145,13 @@ def build_pending_decisions_prompt(
     return (
         f"[SUBCONSCIOUS] Rev has been idle for ~{int(idle_minutes)} minutes and just came back.\n\n"
         f"{history}"
-        f"There are pending decisions from recent reports:\n\n"
+        f"Pending decisions from recent reports:\n\n"
         f"{decisions_text}\n\n"
-        f"Karla: spawn a sub-agent to evaluate these items. Have it check each one against "
-        f"the current project state and classify as: (a) easy win — do it now, "
-        f"(b) needs Rev's input — prepare a one-liner summary for Rev, "
-        f"(c) already handled or not actionable — mark done. "
-        f"You just review the sub-agent's classification and act accordingly.\n\n"
-        f"Actions: [execute_now, ask_rev, mark_done]\n"
-        f"Respond with: {{\"action\": \"...\", \"item\": \"...\", \"reason\": \"...\"}}"
+        f"Worker:\n"
+        f"1. Ack in_progress ({_ACK}).\n"
+        f"2. For each item, classify with tools against current project state: "
+        f"(a) easy win — do it now, (b) needs Rev — prepare a one-liner, "
+        f"(c) already handled — mark done.\n"
+        f"3. Execute easy wins; WRITE Inbox …-face.md for anything Rev must see.\n"
+        f"4. Ack done. Tools first — do not stop at a plan or JSON.\n"
     )
