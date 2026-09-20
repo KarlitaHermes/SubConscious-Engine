@@ -35,7 +35,10 @@ class App:
         self._config = config
         self._running = False
         self._bus = EventBus()
-        self._state = StateManager(config.state.file)
+        self._state = StateManager(
+            config.state.file,
+            inbox_dir=self._resolve_inbox_dir(config),
+        )
         self._http: Optional[aiohttp.ClientSession] = None
         self._delivery: Optional[SubConsciousClient] = None
         self._registry: Optional[SessionRegistry] = None
@@ -43,6 +46,15 @@ class App:
         self._notify_gate: Optional[NotifyGate] = None
         self._sources: list = []
         self._tasks: list[asyncio.Task] = []
+
+    @staticmethod
+    def _resolve_inbox_dir(config: Config) -> Path:
+        """Inbox path for delivery-failure reports (never Path.home() ambient)."""
+        for entry_point in config.entry_points:
+            if entry_point.type == "directory" and entry_point.handle.handler == "inbox":
+                if entry_point.path is not None:
+                    return entry_point.path
+        return config.idle.vault_root / "COMMS" / "Inbox"
 
     async def run(self) -> None:
         """Run until shutdown signal."""

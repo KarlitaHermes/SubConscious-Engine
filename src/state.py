@@ -23,8 +23,15 @@ DEFAULT_IN_PROGRESS_TIMEOUT_MINUTES = 180
 class StateManager:
     """Manages engine state persistence."""
 
-    def __init__(self, state_file: Path) -> None:
+    def __init__(
+        self,
+        state_file: Path,
+        *,
+        inbox_dir: Path | None = None,
+    ) -> None:
         self._state_file = state_file
+        # Where give-up failure reports are written. None = do not write (tests).
+        self._inbox_dir = inbox_dir
         self._data: dict[str, Any] = {
             "last_trigger": None,
             "trigger_count": 0,
@@ -334,8 +341,14 @@ class StateManager:
             attempts,
         )
         self.mark_file_processed(entry_point_id, filename, fingerprint)
+        if self._inbox_dir is None:
+            logger.error(
+                "Inbox give-up for %s — no inbox_dir configured; skipping failure report write",
+                filename,
+            )
+            return
         try:
-            inbox = Path.home() / "vault" / "COMMS" / "Inbox"
+            inbox = Path(self._inbox_dir)
             inbox.mkdir(parents=True, exist_ok=True)
             day = time.strftime("%Y-%m-%d")
             fail = inbox / f"kanban-report-inbox-delivery-failed-{day}-face.md"

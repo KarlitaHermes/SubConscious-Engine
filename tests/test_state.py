@@ -239,7 +239,8 @@ def test_inbox_inflight_gives_up_after_max_attempts(
     base = 4_000_000.0
     t = {"now": base}
     monkeypatch.setattr(time, "time", lambda: t["now"])
-    state = StateManager(tmp_path / "state.yaml")
+    sandbox_inbox = tmp_path / "Inbox"
+    state = StateManager(tmp_path / "state.yaml", inbox_dir=sandbox_inbox)
     fp = "1:2"
     for i in range(state.INBOX_INFLIGHT_MAX_ATTEMPTS):
         state.mark_inbox_inflight("inbox", "stuck.md", fp)
@@ -250,6 +251,35 @@ def test_inbox_inflight_gives_up_after_max_attempts(
         else:
             assert still is True  # gave up — treated as processed/skip
     assert state.is_file_processed("inbox", "stuck.md", fp) is True
+    # Failure report lands in sandbox only — never the live vault (C12).
+    written = list(sandbox_inbox.glob("kanban-report-inbox-delivery-failed-*-face.md"))
+    assert len(written) == 1
+    assert "stuck.md" in written[0].read_text(encoding="utf-8")
+    live = Path.home() / "vault" / "COMMS" / "Inbox"
+    if live.is_dir():
+        for p in live.glob("kanban-report-inbox-delivery-failed-*-face.md"):
+            assert "stuck.md" not in p.read_text(encoding="utf-8")
+
+
+def test_give_up_without_inbox_dir_does_not_touch_vault(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = 4_000_000.0
+    t = {"now": base}
+    monkeypatch.setattr(time, "time", lambda: t["now"])
+    state = StateManager(tmp_path / "state.yaml")  # inbox_dir=None
+    fp = "9:9"
+    before = set((Path.home() / "vault" / "COMMS" / "Inbox").glob(
+        "kanban-report-inbox-delivery-failed-*-face.md"
+    )) if (Path.home() / "vault" / "COMMS" / "Inbox").is_dir() else set()
+    for i in range(state.INBOX_INFLIGHT_MAX_ATTEMPTS):
+        state.mark_inbox_inflight("inbox", "nope.md", fp)
+        t["now"] = base + (i + 1) * (state.INBOX_INFLIGHT_TIMEOUT_SEC + 1)
+        state.is_inbox_inflight("inbox", "nope.md", fp)
+    after = set((Path.home() / "vault" / "COMMS" / "Inbox").glob(
+        "kanban-report-inbox-delivery-failed-*-face.md"
+    )) if (Path.home() / "vault" / "COMMS" / "Inbox").is_dir() else set()
+    assert after == before
 
 
 def test_recent_deliveries_returns_type_and_minutes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
