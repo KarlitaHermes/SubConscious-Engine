@@ -77,6 +77,11 @@ class InboxEventSource:
                 continue
             if self._state.is_file_processed(self._entry_point.id, path.name, fingerprint):
                 continue
+            # Queued inject awaiting surface — do not republish until flush timeout.
+            if self._state.is_inbox_inflight(
+                self._entry_point.id, path.name, fingerprint
+            ):
+                continue
 
             classification = classify_inbox_file(
                 path,
@@ -94,6 +99,7 @@ class InboxEventSource:
                 cooldown_key=f"inbox:{classification.filename}",
                 metadata={
                     "file": path.name,
+                    "file_fingerprint": fingerprint,
                     "handler": "inbox",
                     "disposition": classification.disposition,
                     "vault_dest": classification.vault_dest,
@@ -110,8 +116,11 @@ class InboxEventSource:
                         source=f"inbox {self._entry_point.id}",
                     )
                     continue
+            # Do NOT mark processed here — router commits after delivery succeeds.
+            # Marking on publish caused permanent loss when delivery then suppressed (Bug A).
             if await bus.publish(event):
-                self._state.mark_file_processed(
-                    self._entry_point.id, path.name, fingerprint
+                logger.info(
+                    "Inbox event published for %s (%s) — pending delivery",
+                    path.name,
+                    classification.disposition,
                 )
-                logger.info("Inbox event published for %s (%s)", path.name, classification.disposition)

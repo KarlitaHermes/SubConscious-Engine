@@ -166,6 +166,18 @@ def test_blocks_nudge_budget(tmp_path: Path) -> None:
     assert gate.check(state, _event()) is SuppressReason.NUDGE_BUDGET
 
 
+def test_inbox_notify_exempt_from_nudge_budget(tmp_path: Path) -> None:
+    state = StateManager(tmp_path / "state.yaml")
+    gate = _gate(tmp_path, rules=[{"event_type": "*"}])
+    for i in range(6):
+        state.record_delivery(f"e{i}", "test", ["s1"], success=True, cooldown_key=f"k{i}")
+    inbox = _event()
+    inbox.event_type = "inbox_notify"
+    inbox.cooldown_key = "inbox:kanban-report-a6d-face.md"
+    inbox.metadata = {"file": "kanban-report-a6d-face.md"}
+    assert gate.check(state, inbox) is None
+
+
 def test_nudge_budget_zero_means_unlimited(tmp_path: Path) -> None:
     import time as _time
 

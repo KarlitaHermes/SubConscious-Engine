@@ -65,39 +65,37 @@ class Router:
             recipient = str((event.metadata or {}).get("inbox_recipient") or "face")
             if recipient == "worker":
                 results = await self._deliver_inbox_worker(event)
-                success = any(r.success for r in results)
-                self._state.record_delivery(
-                    event_id=event.id,
-                    event_type=event.event_type,
-                    session_ids=[r.session_id for r in results if r.success],
-                    success=success,
-                    cooldown_key=cooldown_key,
-                )
-                if success:
-                    self._state.clear_deferred(cooldown_key)
-                return results
+                return self._finish_delivery(event, results, cooldown_key)
             if recipient in ("dumb", "musickarla"):
-                # No dedicated subconscious adapters yet — page Face with a note.
-                logger.info(
-                    "Inbox recipient %s has no adapter; delivering to Face (%s)",
+                # No subconscious adapters on those profiles yet — Face, with an honest prefix.
+                logger.warning(
+                    "Inbox recipient %s has no adapter; delivering to Face with prefix (%s)",
                     recipient,
                     event.id,
                 )
-
+                event = Event(
+                    text=(
+                        f"[inbox recipient={recipient} — no adapter; delivered to Face]\n\n"
+                        f"{event.text}"
+                    ),
+                    event_type=event.event_type,
+                    source=event.source,
+                    entry_point=event.entry_point,
+                    task_id=event.task_id,
+                    id=event.id,
+                    preferred_target=event.preferred_target,
+                    preferred_source=event.preferred_source,
+                    targets=list(event.targets),
+                    priority=event.priority,
+                    cooldown_key=event.cooldown_key,
+                    metadata={**(event.metadata or {}), "inbox_recipient": "face",
+                              "inbox_recipient_requested": recipient},
+                    created_at=event.created_at,
+                )
         # Script mode: start a board/pipeline without injecting Face/Worker.
         if rule.mode == "script" and rule.script:
             results = await self._run_script(event, rule)
-            success = any(r.success for r in results)
-            self._state.record_delivery(
-                event_id=event.id,
-                event_type=event.event_type,
-                session_ids=[r.session_id for r in results if r.success],
-                success=success,
-                cooldown_key=cooldown_key,
-            )
-            if success:
-                self._state.clear_deferred(cooldown_key)
-            return results
+            return self._finish_delivery(event, results, cooldown_key)
 
         # Sticky Worker session pin — only when the rule asks for it.
         # Do NOT route Face telegram (e.g. inbox_notify) through Worker just
@@ -107,16 +105,7 @@ class Router:
             success = any(r.success for r in results)
             if success and rule.inbox_report:
                 self._write_inbox_report(event)
-            self._state.record_delivery(
-                event_id=event.id,
-                event_type=event.event_type,
-                session_ids=[r.session_id for r in results if r.success],
-                success=success,
-                cooldown_key=cooldown_key,
-            )
-            if success:
-                self._state.clear_deferred(cooldown_key)
-            return results
+            return self._finish_delivery(event, results, cooldown_key)
 
         targets = await self._resolve_targets(event, rule)
         if not targets:
@@ -131,17 +120,48 @@ class Router:
             targets,
             adapter_url=rule.inject_url,
         )
-        success_count = sum(1 for r in results if r.success)
+        return self._finish_delivery(event, results, cooldown_key)
+
+    def _finish_delivery(
+        self,
+        event: Event,
+        results: list[DeliveryResult],
+        cooldown_key: str,
+    ) -> list[DeliveryResult]:
+        """Record delivery, commit inbox fingerprints, clear deferred."""
+        success = any(r.success for r in results)
+        queued = any(getattr(r, "queued", False) for r in results if r.success)
         self._state.record_delivery(
             event_id=event.id,
             event_type=event.event_type,
             session_ids=[r.session_id for r in results if r.success],
-            success=success_count > 0,
+            success=success,
             cooldown_key=cooldown_key,
+            queued=queued,
         )
-        if success_count > 0:
+        if success:
             self._state.clear_deferred(cooldown_key)
+            self._commit_inbox_file(event, queued=queued)
         return results
+
+    def _commit_inbox_file(self, event: Event, *, queued: bool) -> None:
+        """Mark inbox file processed only after surfaced delivery (Bug A/B)."""
+        if event.event_type not in ("inbox_notify", "inbox_item"):
+            return
+        meta = event.metadata or {}
+        filename = meta.get("file")
+        fingerprint = meta.get("file_fingerprint")
+        entry = event.entry_point or "inbox"
+        if not filename or not fingerprint:
+            return
+        if queued:
+            self._state.mark_inbox_inflight(entry, str(filename), str(fingerprint))
+            logger.info(
+                "Inbox %s queued — inflight until surface/ack or flush timeout",
+                filename,
+            )
+            return
+        self._state.mark_file_processed(entry, str(filename), str(fingerprint))
 
     def _preferred_pin(self, rule: RouteRule) -> str:
         return (
@@ -317,7 +337,13 @@ class Router:
                 cooldown_key,
             )
         elif reason is SuppressReason.NUDGE_BUDGET:
-            logger.info("Event %s skipped — nudge budget exceeded", event.id)
+            fname = (event.metadata or {}).get("file") or cooldown_key
+            logger.warning(
+                "Event %s type=%s skipped — nudge budget exceeded (file=%s)",
+                event.id,
+                event.event_type,
+                fname,
+            )
 
     async def _deliver_inbox_worker(self, event: Event) -> list[DeliveryResult]:
         """Inject an Inbox notify into the Worker sticky session."""

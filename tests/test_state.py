@@ -210,6 +210,28 @@ def test_nudge_budget_failed_delivery_not_counted(tmp_path: Path, monkeypatch: p
     assert state.nudge_count_window(3600) == 0
 
 
+def test_nudge_budget_queued_and_inbox_not_counted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    base = 4_000_000.0
+    monkeypatch.setattr(time, "time", lambda: base)
+    state = StateManager(tmp_path / "state.yaml")
+    state.record_delivery("e0", "maintenance", ["s1"], success=True, queued=True)
+    state.record_delivery("e1", "inbox_notify", ["s1"], success=True)
+    assert state.nudge_count_window(3600) == 0
+    state.record_delivery("e2", "maintenance", ["s1"], success=True)
+    assert state.nudge_count_window(3600) == 1
+
+
+def test_inbox_inflight_expires(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    base = 4_000_000.0
+    t = {"now": base}
+    monkeypatch.setattr(time, "time", lambda: t["now"])
+    state = StateManager(tmp_path / "state.yaml")
+    state.mark_inbox_inflight("inbox", "a.md", "1:2")
+    assert state.is_inbox_inflight("inbox", "a.md", "1:2") is True
+    t["now"] = base + state.INBOX_INFLIGHT_TIMEOUT_SEC + 1
+    assert state.is_inbox_inflight("inbox", "a.md", "1:2") is False
+
+
 def test_recent_deliveries_returns_type_and_minutes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     base = 4_000_000.0
     t = {"now": base}

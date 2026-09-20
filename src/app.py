@@ -81,13 +81,25 @@ class App:
             try:
                 results = await self._router.handle(event)
                 ok = sum(1 for r in results if r.success)
-                logger.info(
-                    "Event %s type=%s delivered %d/%d",
-                    event.id,
-                    event.event_type,
-                    ok,
-                    len(results),
-                )
+                queued = sum(1 for r in results if r.success and getattr(r, "queued", False))
+                # "delivered" only means adapter accepted HTTP — may be queued mid-turn.
+                if queued:
+                    logger.info(
+                        "Event %s type=%s accepted %d/%d (%d queued — not yet surfaced)",
+                        event.id,
+                        event.event_type,
+                        ok,
+                        len(results),
+                        queued,
+                    )
+                else:
+                    logger.info(
+                        "Event %s type=%s accepted %d/%d",
+                        event.id,
+                        event.event_type,
+                        ok,
+                        len(results),
+                    )
             except Exception:
                 logger.exception("Router error for event %s", event.id)
 

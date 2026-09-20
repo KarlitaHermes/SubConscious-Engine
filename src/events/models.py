@@ -70,3 +70,5 @@ class DeliveryResult:
     session_id: str
     success: bool
     error: Optional[str] = None
+    # True when adapter accepted inject into a busy-session queue (not yet surfaced).
+    queued: bool = False

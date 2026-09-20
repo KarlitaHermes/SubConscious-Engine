@@ -90,20 +90,28 @@ class StateManager:
         session_ids: list[str],
         success: bool,
         cooldown_key: str = "default",
+        *,
+        queued: bool = False,
+        count_nudge: bool | None = None,
     ) -> None:
-        """Record a delivery and update cooldowns."""
+        """Record a delivery and update cooldowns.
+
+        Nudge budget only counts *surfaced* proactive deliveries. Queued injects
+        and inbox reports do not burn budget slots.
+        """
         now = time.time()
         if success:
             self._data["last_trigger"] = now
             self._data["trigger_count"] = int(self._data.get("trigger_count", 0)) + 1
             cooldowns = self._data.setdefault("cooldowns", {})
             cooldowns[cooldown_key] = now
-            # Track for nudge budget
-            timestamps = self._data.setdefault("nudge_timestamps", [])
-            timestamps.append(now)
-            # Keep only last 24h
-            cutoff = now - 86400
-            self._data["nudge_timestamps"] = [t for t in timestamps if t > cutoff]
+            if count_nudge is None:
+                count_nudge = (not queued) and event_type not in (
+                    "inbox_notify",
+                    "inbox_item",
+                )
+            if count_nudge:
+                self.record_nudge_in_window()
 
         deliveries = self._data.setdefault("deliveries", [])
         deliveries.append(
@@ -112,6 +120,7 @@ class StateManager:
                 "event_type": event_type,
                 "session_ids": session_ids,
                 "success": success,
+                "queued": queued,
                 "timestamp": now,
             }
         )
@@ -222,11 +231,70 @@ class StateManager:
         filename: str,
         fingerprint: str | None = None,
     ) -> None:
-        """Record that a directory file has been published as an event."""
+        """Record that a directory file has been successfully delivered (or acked)."""
         processed = self._data.setdefault("processed_files", {})
         entry_files = processed.setdefault(entry_point_id, {})
         entry_files[filename] = fingerprint if fingerprint is not None else time.time()
+        self.clear_inbox_inflight(entry_point_id, filename)
         self.save()
+
+    # Inbox queue flush: queued inject not yet surfaced — don't republish until timeout.
+    INBOX_INFLIGHT_TIMEOUT_SEC = 900  # 15 minutes
+
+    def mark_inbox_inflight(
+        self,
+        entry_point_id: str,
+        filename: str,
+        fingerprint: str,
+    ) -> None:
+        """Note a queued inbox inject awaiting surface/ack."""
+        inflight = self._data.setdefault("inbox_inflight", {})
+        entry = inflight.setdefault(entry_point_id, {})
+        entry[filename] = {"fingerprint": fingerprint, "since": time.time()}
+        self.save()
+
+    def clear_inbox_inflight(self, entry_point_id: str, filename: str) -> None:
+        inflight = self._data.get("inbox_inflight") or {}
+        entry = inflight.get(entry_point_id) or {}
+        if filename in entry:
+            entry.pop(filename, None)
+            if not entry:
+                inflight.pop(entry_point_id, None)
+            self.save()
+
+    def is_inbox_inflight(
+        self,
+        entry_point_id: str,
+        filename: str,
+        fingerprint: str,
+        *,
+        timeout_sec: int | None = None,
+    ) -> bool:
+        """True if a queued inject is still within the flush window (skip republish)."""
+        inflight = self._data.get("inbox_inflight") or {}
+        entry = inflight.get(entry_point_id) or {}
+        raw = entry.get(filename)
+        if not isinstance(raw, dict):
+            return False
+        if raw.get("fingerprint") != fingerprint:
+            return False
+        timeout = (
+            self.INBOX_INFLIGHT_TIMEOUT_SEC if timeout_sec is None else max(1, timeout_sec)
+        )
+        since = float(raw.get("since") or 0.0)
+        if since and (time.time() - since) > timeout:
+            entry.pop(filename, None)
+            if not entry:
+                inflight.pop(entry_point_id, None)
+            self.save()
+            logger.warning(
+                "Inbox inflight expired for %s/%s after %ds — will re-inject",
+                entry_point_id,
+                filename,
+                timeout,
+            )
+            return False
+        return True
 
     @property
     def rule_last_run(self) -> dict[str, float]:
@@ -344,6 +412,20 @@ class StateManager:
                 self._data["idle_period_active"] = False
         else:
             logger.warning("Unknown ack status %r for %s", status, cooldown_key)
+
+        # Inbox: agent saw the report — commit processed from inflight fingerprint.
+        if cooldown_key.startswith("inbox:") and normalized in (
+            ACK_STATUS_IN_PROGRESS,
+            *ACK_TERMINAL_STATUSES,
+        ):
+            filename = cooldown_key[len("inbox:") :]
+            for entry_id, files in list((self._data.get("inbox_inflight") or {}).items()):
+                raw = (files or {}).get(filename)
+                if isinstance(raw, dict) and raw.get("fingerprint"):
+                    self.mark_file_processed(
+                        str(entry_id), filename, str(raw["fingerprint"])
+                    )
+                    break
 
         acks = self._data.setdefault("acks", [])
         acks.append(

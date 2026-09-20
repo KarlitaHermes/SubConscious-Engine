@@ -59,8 +59,18 @@ class SubConsciousClient:
             async with http.post(url, json=payload) as resp:
                 data = await resp.json()
                 if resp.status == 200 and data.get("ok"):
-                    logger.info("Injected into session %s via %s", session_id, base)
-                    return DeliveryResult(session_id=session_id, success=True)
+                    queued = bool(data.get("queued"))
+                    if queued:
+                        logger.info(
+                            "Inject queued for busy session %s via %s (not yet surfaced)",
+                            session_id,
+                            base,
+                        )
+                    else:
+                        logger.info("Injected into session %s via %s", session_id, base)
+                    return DeliveryResult(
+                        session_id=session_id, success=True, queued=queued
+                    )
                 error = data.get("error", f"HTTP {resp.status}")
                 logger.warning("Inject failed for %s: %s", session_id, error)
                 return DeliveryResult(session_id=session_id, success=False, error=str(error))

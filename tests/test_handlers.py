@@ -127,7 +127,9 @@ async def test_inbox_source_publishes_new_file(tmp_path: Path) -> None:
     assert len(events) == 1
     assert events[0].entry_point == "inbox"
     assert events[0].event_type == "inbox_item"
-    assert state.is_file_processed("inbox", "email-test.md") is True
+    assert events[0].metadata.get("file_fingerprint")
+    # Processed only after delivery — publish alone must not mark (Bug A).
+    assert state.is_file_processed("inbox", "email-test.md") is False
 
 
 @pytest.mark.asyncio

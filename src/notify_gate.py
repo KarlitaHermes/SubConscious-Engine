@@ -80,7 +80,12 @@ class NotifyGate:
                 return SuppressReason.COOLDOWN
 
         budget = self._config.idle.nudge_budget_per_hour
-        if budget > 0 and state.nudge_count_window(3600) >= budget:
+        # Inbox reports are work product, not proactive interruptions — never budget-cap them.
+        if (
+            budget > 0
+            and event.event_type not in ("inbox_notify", "inbox_item")
+            and state.nudge_count_window(3600) >= budget
+        ):
             return SuppressReason.NUDGE_BUDGET
 
         if rule.preferred_window is not None:
@@ -193,10 +198,13 @@ class NotifyGate:
                 key,
             )
         elif reason is SuppressReason.NUDGE_BUDGET:
-            logger.debug(
-                "%sevent type=%s suppressed — nudge budget exceeded",
+            fname = (event.metadata or {}).get("file") or event.cooldown_key or "?"
+            logger.warning(
+                "%sevent type=%s suppressed — nudge budget exceeded (file=%s id=%s)",
                 prefix,
                 event.event_type,
+                fname,
+                event.id,
             )
         elif reason is SuppressReason.DEFER_PREFERRED_WINDOW:
             logger.debug(
