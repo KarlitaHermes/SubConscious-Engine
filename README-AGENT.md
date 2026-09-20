@@ -1267,6 +1267,26 @@ sudo systemctl restart subconscious-engine.service
 
 No Hermes gateway core changes are required — the adapter uses the gateway's existing `_enqueue_fifo` when the session is busy.
 
+### 14.9 Editing `state.yaml` by hand
+
+**Always stop the engine first**, edit, then start:
+
+```bash
+sudo systemctl stop subconscious-engine.service
+# edit ~/.hermes/subconscious-engine/state.yaml
+sudo systemctl start subconscious-engine.service
+```
+
+If you edit while SE is running, the in-memory process **overwrites your changes on shutdown** — the edit looks like it worked and then silently undoes itself.
+
+### 14.10 Inbox delivery notes
+
+- Inbox files are marked **processed only after surfaced delivery** (or agent ack), not on publish.
+- `inbox_notify` / `inbox_item` are **exempt from the hourly nudge budget**.
+- Queued injects use `inbox_inflight` (15m). After 4 failed surface attempts (~1h busy), SE marks processed and writes `kanban-report-inbox-delivery-failed-*-face.md`.
+- Prefer at-least-once: a late original + a retry can both surface (duplicate). Loss was worse.
+- Recipients `-dumb` / `-musickarla` have no adapter — WARNING + fall through to Face with an explicit prefix.
+
 ---
 
 ## 11. Quick reference — minimal path from zero to running

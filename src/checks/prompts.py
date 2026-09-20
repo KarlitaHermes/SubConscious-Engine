@@ -125,7 +125,8 @@ def build_research_prompt(
         f"2. Check {report_dir} for research in the last 48h; skip duplicates.\n"
         f"3. Pick ONE new topic from the research tasks or DREAM journal; research it "
         f"with tools; WRITE findings under {report_dir}.\n"
-        f"4. If Face/Rev must know: WRITE ~/vault/COMMS/Inbox/research-digest-YYYY-MM-DD-face.md.\n"
+        f"4. If Face/Rev must know: WRITE ~/vault/COMMS/Inbox/research-digest-YYYY-MM-DD-HH-face.md "
+        f"(include hour 00–23 so a second digest that day does not overwrite the first).\n"
         f"5. Ack done. Do not stop at a plan or JSON — tools first.\n"
     )
 

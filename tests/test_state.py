@@ -229,7 +229,27 @@ def test_inbox_inflight_expires(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     state.mark_inbox_inflight("inbox", "a.md", "1:2")
     assert state.is_inbox_inflight("inbox", "a.md", "1:2") is True
     t["now"] = base + state.INBOX_INFLIGHT_TIMEOUT_SEC + 1
+    # First expiry → awaiting retry (not skip)
     assert state.is_inbox_inflight("inbox", "a.md", "1:2") is False
+
+
+def test_inbox_inflight_gives_up_after_max_attempts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = 4_000_000.0
+    t = {"now": base}
+    monkeypatch.setattr(time, "time", lambda: t["now"])
+    state = StateManager(tmp_path / "state.yaml")
+    fp = "1:2"
+    for i in range(state.INBOX_INFLIGHT_MAX_ATTEMPTS):
+        state.mark_inbox_inflight("inbox", "stuck.md", fp)
+        t["now"] = base + (i + 1) * (state.INBOX_INFLIGHT_TIMEOUT_SEC + 1)
+        still = state.is_inbox_inflight("inbox", "stuck.md", fp)
+        if i + 1 < state.INBOX_INFLIGHT_MAX_ATTEMPTS:
+            assert still is False  # allow retry
+        else:
+            assert still is True  # gave up — treated as processed/skip
+    assert state.is_file_processed("inbox", "stuck.md", fp) is True
 
 
 def test_recent_deliveries_returns_type_and_minutes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

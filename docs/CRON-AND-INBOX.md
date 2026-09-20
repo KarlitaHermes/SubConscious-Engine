@@ -136,7 +136,8 @@ Configure jobs in Hermes with **`deliver: local`** and a script that **writes ma
 | Category | Example schedule | Output file pattern | Notes |
 |----------|------------------|---------------------|--------|
 | News digest | Daily 05:00 | `news-digest-YYYY-MM-DD.md` | Research headlines → inbox |
-| Research digest | Every 2 days | `research-digest-*.md` | Portfolio / deep research |
+| Research digest | Every 2 days | `research-digest-YYYY-MM-DD-HH-face.md` | Portfolio / deep research (hour avoids same-day overwrite) |
+
 | Email fetch | Every 5 min | `email-<timestamp>-<subject-slug>.md` | Use trusted-sender + 2FA rules in skill |
 | Dream session | Daily 03:10 | `dream-session-YYYY-MM-DD.md` | Idea extraction |
 | Vault hygiene | Weekly | `vault-hygiene-*.md` | Cleanup report |

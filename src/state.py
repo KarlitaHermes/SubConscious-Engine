@@ -240,6 +240,7 @@ class StateManager:
 
     # Inbox queue flush: queued inject not yet surfaced — don't republish until timeout.
     INBOX_INFLIGHT_TIMEOUT_SEC = 900  # 15 minutes
+    INBOX_INFLIGHT_MAX_ATTEMPTS = 4  # ~1h of busy-session retries, then give up
 
     def mark_inbox_inflight(
         self,
@@ -250,7 +251,13 @@ class StateManager:
         """Note a queued inbox inject awaiting surface/ack."""
         inflight = self._data.setdefault("inbox_inflight", {})
         entry = inflight.setdefault(entry_point_id, {})
-        entry[filename] = {"fingerprint": fingerprint, "since": time.time()}
+        prev = entry.get(filename) if isinstance(entry.get(filename), dict) else {}
+        attempts = int(prev.get("attempts") or 0) + 1
+        entry[filename] = {
+            "fingerprint": fingerprint,
+            "since": time.time(),
+            "attempts": attempts,
+        }
         self.save()
 
     def clear_inbox_inflight(self, entry_point_id: str, filename: str) -> None:
@@ -270,7 +277,11 @@ class StateManager:
         *,
         timeout_sec: int | None = None,
     ) -> bool:
-        """True if a queued inject is still within the flush window (skip republish)."""
+        """True if a queued inject is still within the flush window (skip republish).
+
+        On timeout: allow one more publish cycle unless attempts >= MAX, then
+        mark processed and write a visible failure record (no silent forever-loop).
+        """
         inflight = self._data.get("inbox_inflight") or {}
         entry = inflight.get(entry_point_id) or {}
         raw = entry.get(filename)
@@ -278,23 +289,76 @@ class StateManager:
             return False
         if raw.get("fingerprint") != fingerprint:
             return False
+        if raw.get("awaiting_retry"):
+            return False
         timeout = (
             self.INBOX_INFLIGHT_TIMEOUT_SEC if timeout_sec is None else max(1, timeout_sec)
         )
         since = float(raw.get("since") or 0.0)
         if since and (time.time() - since) > timeout:
-            entry.pop(filename, None)
-            if not entry:
-                inflight.pop(entry_point_id, None)
+            attempts = int(raw.get("attempts") or 1)
+            if attempts >= self.INBOX_INFLIGHT_MAX_ATTEMPTS:
+                self._give_up_inbox_inflight(
+                    entry_point_id, filename, fingerprint, attempts
+                )
+                return True  # processed — stop looping
+            entry[filename] = {
+                "fingerprint": fingerprint,
+                "since": 0,
+                "attempts": attempts,
+                "awaiting_retry": True,
+            }
             self.save()
             logger.warning(
-                "Inbox inflight expired for %s/%s after %ds — will re-inject",
+                "Inbox inflight expired for %s/%s after %ds (attempt %d/%d) — will re-inject",
                 entry_point_id,
                 filename,
                 timeout,
+                attempts,
+                self.INBOX_INFLIGHT_MAX_ATTEMPTS,
             )
             return False
         return True
+
+    def _give_up_inbox_inflight(
+        self,
+        entry_point_id: str,
+        filename: str,
+        fingerprint: str,
+        attempts: int,
+    ) -> None:
+        """Stop retrying; mark processed; page Face with a failure record."""
+        logger.error(
+            "Inbox delivery gave up on %s after %d queued attempts — writing failure record",
+            filename,
+            attempts,
+        )
+        self.mark_file_processed(entry_point_id, filename, fingerprint)
+        try:
+            inbox = Path.home() / "vault" / "COMMS" / "Inbox"
+            inbox.mkdir(parents=True, exist_ok=True)
+            day = time.strftime("%Y-%m-%d")
+            fail = inbox / f"kanban-report-inbox-delivery-failed-{day}-face.md"
+            body = (
+                f"# Inbox delivery failed\n\n"
+                f"status: fail\n"
+                f"file: {filename}\n"
+                f"attempts: {attempts}\n"
+                f"summary: Queued inject never surfaced after "
+                f"{attempts}×{self.INBOX_INFLIGHT_TIMEOUT_SEC // 60}m windows. "
+                f"Marked processed to stop the retry loop. "
+                f"Re-drop or rewrite the file (new fingerprint) to retry.\n"
+            )
+            # Append if multiple failures same day
+            if fail.is_file():
+                fail.write_text(
+                    fail.read_text(encoding="utf-8") + "\n---\n" + body,
+                    encoding="utf-8",
+                )
+            else:
+                fail.write_text(body, encoding="utf-8")
+        except OSError as exc:
+            logger.warning("Could not write inbox delivery failure record: %s", exc)
 
     @property
     def rule_last_run(self) -> dict[str, float]:
