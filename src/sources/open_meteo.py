@@ -1,9 +1,16 @@
-"""Parse Open-Meteo forecast API responses into engine events."""
+"""Parse Open-Meteo forecast API responses into engine events.
+
+Weather-worker/v1 contract (2026-09-23): emit structured JSON Face can verify
+without re-pulling. Always include rain_mm (incl. 0.0) and gust_kmh. No ride
+verdict — Face owns judgment.
+"""
 
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from src.config.models import HandleConfig
 from src.events.models import Event, EventSourceKind
@@ -36,6 +43,7 @@ WMO_DESCRIPTIONS: dict[int, str] = {
 
 THUNDERSTORM_CODES = frozenset({95, 96, 99})
 HEAVY_RAIN_CODES = frozenset({65, 81, 82})
+WARSAW_TZ = ZoneInfo("Europe/Warsaw")
 
 
 def describe_weather_code(code: int | None) -> str:
@@ -83,15 +91,17 @@ def _parse_hourly_window(
     if not isinstance(times, list) or not times:
         return []
 
-    hours = min(handle.forecast_hours, len(times))
+    # URL defines the window (past_hours + forecast_hours); use every returned slot.
+    hours = len(times)
     label = handle.location_name or "Warsaw"
     window_start = str(times[0])
     window_end = str(times[hours - 1])
+    generated_at = datetime.now(WARSAW_TZ).isoformat(timespec="seconds")
 
+    hour_rows: list[dict[str, Any]] = []
     lines: list[str] = []
     alerts: list[str] = []
-    max_precip_prob = 0
-    worst_code: int | None = None
+    temps: list[float] = []
 
     for idx in range(hours):
         when = str(times[idx])
@@ -102,17 +112,35 @@ def _parse_hourly_window(
         precip_prob = _series_value(hourly, "precipitation_probability", idx)
         precip_mm = _series_value(hourly, "precipitation", idx)
         wind = _series_value(hourly, "wind_speed_10m", idx)
+        gust = _series_value(hourly, "wind_gusts_10m", idx)
 
-        if precip_prob is not None:
-            max_precip_prob = max(max_precip_prob, int(precip_prob))
         if code is not None:
-            worst_code = code if worst_code is None else _worse_code(worst_code, code)
+            pass  # alerts below
+        if isinstance(temp, (int, float)):
+            temps.append(float(temp))
 
         conditions = describe_weather_code(code)
+        # I7: rain_mm ALWAYS present when fetched, including 0.0
+        mm_val = float(precip_mm) if precip_mm is not None else None
+        row = {
+            "time": when,
+            "temp_c": float(temp) if temp is not None else 0.0,
+            "rain_chance_pct": int(precip_prob) if precip_prob is not None else 0,
+            "rain_mm": mm_val if mm_val is not None else 0.0,
+            "wind_kmh": float(wind) if wind is not None else 0.0,
+            "gust_kmh": float(gust) if gust is not None else 0.0,
+            "code": code if code is not None else 0,
+            "conditions": conditions,
+        }
+        hour_rows.append(row)
+
         prob_bit = f", rain {precip_prob}%" if precip_prob is not None else ""
-        mm_bit = f", {precip_mm} mm" if precip_mm not in (None, 0, 0.0) else ""
+        mm_bit = f", {row['rain_mm']} mm"
         wind_bit = f", wind {wind} km/h" if wind is not None else ""
-        lines.append(f"  {hour_label}: {temp}°C, {conditions}{prob_bit}{mm_bit}{wind_bit}")
+        gust_bit = f", gust {gust} km/h" if gust is not None else ""
+        lines.append(
+            f"  {hour_label}: {temp}°C, {conditions}{prob_bit}{mm_bit}{wind_bit}{gust_bit}"
+        )
 
         if code in THUNDERSTORM_CODES:
             alerts.append(f"  ⚠️ Thunderstorm expected around {hour_label}")
@@ -121,19 +149,41 @@ def _parse_hourly_window(
         elif precip_prob is not None and int(precip_prob) >= 80:
             alerts.append(f"  ⚠️ High rain chance ({precip_prob}%) around {hour_label}")
 
-    ride = _ride_advisory(alerts, max_precip_prob, worst_code)
-    alerts_block = "Alerts:\n" + "\n".join(alerts) + "\n\n" if alerts else ""
+    daily = data.get("daily") if isinstance(data.get("daily"), dict) else {}
+    payload = {
+        "_contract": "weather-worker/v1 — fill every field, delete nothing, add no prose",
+        "_status": "ran",
+        "site": label if "," in label else f"{label}, PL",
+        "source": "Open-Meteo",
+        "generated_at": generated_at,
+        "window_start": window_start,
+        "window_end": window_end,
+        "day_high_c": _series_value(daily, "temperature_2m_max", 0)
+        if daily
+        else (max(temps) if temps else None),
+        "day_low_c": _series_value(daily, "temperature_2m_min", 0)
+        if daily
+        else (min(temps) if temps else None),
+        "sunrise": _series_value(daily, "sunrise", 0) if daily else None,
+        "sunset": _series_value(daily, "sunset", 0) if daily else None,
+        "hours": hour_rows,
+    }
+
+    weather_json = json.dumps(payload, indent=2, ensure_ascii=False)
+    alerts_block = "Alerts (facts only):\n" + "\n".join(alerts) + "\n\n" if alerts else ""
+    drop_name = f"kanban-report-weather-{window_start[:13].replace('T', '-')}-face.md"
 
     text = (
         f"[SUBCONSCIOUS] Weather next {hours}h for {label}\n"
-        f"Window: {window_start} → {window_end}\n\n"
+        f"Window: {window_start} → {window_end}\n"
+        f"status: ran hours={hours}\n\n"
         f"{alerts_block}"
-        f"Hourly:\n" + "\n".join(lines) + "\n\n"
-        f"Ride/outdoors: {ride}\n\n"
-        f"Worker: summarize in a few lines, then WRITE "
-        f"~/vault/COMMS/Inbox/kanban-report-weather-{window_start[:13].replace('T', '-')}-face.md "
-        f"(notify prefix, -face recipient). Do not message Telegram — SE will inbox_notify Face. "
-        f"Ack when the file exists.\n"
+        f"```weather-json\n{weather_json}\n```\n\n"
+        f"Hourly (convenience table):\n" + "\n".join(lines) + "\n\n"
+        f"Worker: TRANSPORT ONLY — copy the weather-json block verbatim into "
+        f"~/vault/COMMS/Inbox/{drop_name} via write-inbox-report.sh. "
+        f"Do NOT summarise. Do NOT add a verdict or advice field. "
+        f"Face owns judgment. SE will inbox_notify Face. Ack when the file exists.\n"
         f"Source: Open-Meteo (https://open-meteo.com/)"
     )
 
@@ -158,7 +208,8 @@ def _parse_hourly_window(
             "window_end": window_end,
             "forecast_hours": hours,
             "alerts": alerts,
-            "ride_advisory": ride,
+            "contract": "weather-worker/v1",
+            "status": "ran",
         },
     )
     return [(event, dedupe_key)]
@@ -186,14 +237,15 @@ def _parse_daily_summary(
     label = handle.location_name or "Warsaw"
     precip_line = f"  Precipitation: {precip} mm\n" if precip is not None else ""
     text = (
-        f"[SUBCONSCIOUS] Daily weather forecast for {label} ({date})\n\n"
+        f"[SUBCONSCIOUS] Daily weather forecast for {label} ({date})\n"
+        f"status: ran\n\n"
         f"  High: {temp_max}°C\n"
         f"  Low: {temp_min}°C\n"
         f"{precip_line}"
         f"  Conditions: {conditions}\n\n"
-        f"Worker: summarize briefly, then WRITE "
-        f"~/vault/COMMS/Inbox/kanban-report-weather-{date}-face.md. "
-        f"SE will inbox_notify Face — do not use Telegram. Ack when the file exists.\n"
+        f"Worker: TRANSPORT ONLY — write the numbers above into "
+        f"~/vault/COMMS/Inbox/kanban-report-weather-{date}-face.md via write-inbox-report.sh. "
+        f"No verdict. SE will inbox_notify Face. Ack when the file exists.\n"
         f"Source: Open-Meteo (https://open-meteo.com/)"
     )
 
@@ -211,23 +263,10 @@ def _parse_daily_summary(
             "mode": "daily",
             "location": label,
             "date": date,
+            "status": "ran",
         },
     )
     return [(event, dedupe_key)]
-
-
-def _ride_advisory(alerts: list[str], max_precip_prob: int, worst_code: int | None) -> str:
-    if worst_code in THUNDERSTORM_CODES:
-        return "Not recommended — thunderstorm risk in this window."
-    if worst_code in HEAVY_RAIN_CODES:
-        return "Poor — heavy rain expected; delay outdoor ride."
-    if max_precip_prob >= 70:
-        return "Marginal — high rain chance; bring rain gear or wait."
-    if max_precip_prob >= 45:
-        return "OK with caution — some rain possible."
-    if worst_code in {45, 48}:
-        return "Marginal — fog expected; visibility may be poor."
-    return "Good — no significant rain or storms expected."
 
 
 def _worse_code(current: int, candidate: int) -> int:

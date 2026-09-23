@@ -25,6 +25,7 @@ SAMPLE_WARSAW_HOURLY = {
         "weather_code": [61, 63, 95, 81, 61, 2],
         "precipitation": [0.2, 0.5, 1.0, 2.0, 0.3, 0.0],
         "wind_speed_10m": [12.0, 14.0, 18.0, 22.0, 15.0, 10.0],
+        "wind_gusts_10m": [22.0, 24.0, 30.0, 35.0, 28.0, 18.0],
     },
 }
 
@@ -65,10 +66,17 @@ def test_parse_open_meteo_hourly_warsaw() -> None:
     assert "Weather next 6h" in event.text
     assert "kanban-report-weather-" in event.text
     assert "Thunderstorm" in event.text
-    assert "Ride/outdoors:" in event.text
+    assert "```weather-json" in event.text
+    assert "TRANSPORT ONLY" in event.text
+    # I7: zero mm must appear; I9: no Worker verdict
+    assert "0.0 mm" in event.text
+    assert "Ride/outdoors:" not in event.text
+    assert '"rain_mm": 0.0' in event.text
+    assert '"gust_kmh"' in event.text
     assert event.priority >= 15
     assert key == "open-meteo:Warsaw, PL:2026-06-15T16:00"
     assert event.metadata["mode"] == "hourly"
+    assert event.metadata["contract"] == "weather-worker/v1"
     assert len(event.metadata["alerts"]) >= 1
 
 
