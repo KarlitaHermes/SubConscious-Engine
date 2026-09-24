@@ -10,7 +10,7 @@
 # Open-Meteo is free: https://open-meteo.com/
 #
 # Test the URL:
-#   curl -s "https://api.open-meteo.com/v1/forecast?latitude=52.2297&longitude=21.0122&hourly=temperature_2m,precipitation_probability,weather_code,precipitation,wind_speed_10m&forecast_hours=6&timezone=Europe%2FWarsaw"
+#   curl -s "https://api.open-meteo.com/v1/forecast?latitude=52.2297&longitude=21.0122&hourly=temperature_2m,precipitation_probability,weather_code,precipitation,wind_speed_10m,wind_gusts_10m&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min&forecast_hours=6&timezone=Europe%2FWarsaw"
 #
 # IMPORTANT: forecast_hours in the URL must match handle.forecast_hours below.
 # IMPORTANT: poll_interval_seconds should match the forecast window (21600 = 6h).
@@ -19,7 +19,7 @@ entry_points:
   - id: weather_warsaw
     type: http_poll
     enabled: false
-    url: "https://api.open-meteo.com/v1/forecast?latitude=52.2297&longitude=21.0122&hourly=temperature_2m,precipitation_probability,weather_code,precipitation,wind_speed_10m&forecast_hours=6&timezone=Europe%2FWarsaw"
+    url: "https://api.open-meteo.com/v1/forecast?latitude=52.2297&longitude=21.0122&hourly=temperature_2m,precipitation_probability,weather_code,precipitation,wind_speed_10m,wind_gusts_10m&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min&forecast_hours=6&timezone=Europe%2FWarsaw"
     method: GET
     poll_interval_seconds: 21600
     api_key: ""

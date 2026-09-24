@@ -175,10 +175,16 @@ def build_inbox_prompt(path: Path, classification: InboxClassification, vault_ro
     """Build injection text for a new inbox file."""
     _metadata, body = read_frontmatter(path)
     excerpt = body.strip()
-    # Face V1: tool-arg compression used to land literal `...[truncated]` in Inbox.
-    # Flag it so Face re-reads from the producer's session instead of summarizing junk.
-    truncated = "...[truncated]" in excerpt or "…[truncated]" in excerpt
-    complete = "<!-- inbox-complete -->" in path.read_text(encoding="utf-8", errors="replace")
+    # Face V1 / V8: only trust structural markers, not prose that discusses them.
+    # Truncation → final non-empty line ends with the compressor stub.
+    # Completeness → file (stripped) ends with the write-inbox-report marker.
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    last_line = next(
+        (ln.strip() for ln in reversed(raw.splitlines()) if ln.strip()),
+        "",
+    )
+    truncated = last_line.endswith("...[truncated]") or last_line.endswith("…[truncated]")
+    complete = raw.rstrip().endswith("<!-- inbox-complete -->")
     if len(excerpt) > 2500:
         excerpt = excerpt[:2500] + "\n…"
 
@@ -186,13 +192,13 @@ def build_inbox_prompt(path: Path, classification: InboxClassification, vault_ro
     warn = ""
     if truncated:
         warn = (
-            "\n⚠️ TRUNCATED DROP: file contains `...[truncated]` — do NOT trust this body. "
+            "\n⚠️ TRUNCATED DROP: final line ends with `...[truncated]` — do NOT trust this body. "
             "Recover full content from the producer's session tool-call args, then re-write "
             "via write-inbox-report.sh.\n"
         )
     elif not complete:
         warn = (
-            "\n⚠️ Missing `<!-- inbox-complete -->` marker — treat as possibly mid-write.\n"
+            "\n⚠️ Missing trailing `<!-- inbox-complete -->` marker — treat as possibly mid-write.\n"
         )
     return (
         f"[SUBCONSCIOUS] New inbox file: {classification.filename}\n\n"
