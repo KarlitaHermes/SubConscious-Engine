@@ -131,8 +131,14 @@ class RestEventSource:
         )
 
     def _check_auth(self, request: web.Request) -> bool:
+        # Fail closed: empty api_key used to accept anyone on 127.0.0.1 (Face V7).
         if not self._api_key:
-            return True
+            logger.error(
+                "REST entry point %s has empty api_key — rejecting auth "
+                "(set entry_points[].api_key)",
+                self._entry_point.id,
+            )
+            return False
         auth = request.headers.get("Authorization", "")
         if auth.startswith("Bearer "):
             return auth[7:].strip() == self._api_key

@@ -175,15 +175,31 @@ def build_inbox_prompt(path: Path, classification: InboxClassification, vault_ro
     """Build injection text for a new inbox file."""
     _metadata, body = read_frontmatter(path)
     excerpt = body.strip()
+    # Face V1: tool-arg compression used to land literal `...[truncated]` in Inbox.
+    # Flag it so Face re-reads from the producer's session instead of summarizing junk.
+    truncated = "...[truncated]" in excerpt or "…[truncated]" in excerpt
+    complete = "<!-- inbox-complete -->" in path.read_text(encoding="utf-8", errors="replace")
     if len(excerpt) > 2500:
         excerpt = excerpt[:2500] + "\n…"
 
     dest = vault_root / classification.vault_dest
+    warn = ""
+    if truncated:
+        warn = (
+            "\n⚠️ TRUNCATED DROP: file contains `...[truncated]` — do NOT trust this body. "
+            "Recover full content from the producer's session tool-call args, then re-write "
+            "via write-inbox-report.sh.\n"
+        )
+    elif not complete:
+        warn = (
+            "\n⚠️ Missing `<!-- inbox-complete -->` marker — treat as possibly mid-write.\n"
+        )
     return (
         f"[SUBCONSCIOUS] New inbox file: {classification.filename}\n\n"
         f"Disposition: {classification.disposition}\n"
         f"Recipient: {classification.recipient}\n"
-        f"Suggested vault destination: {dest}\n\n"
+        f"Suggested vault destination: {dest}\n"
+        f"{warn}\n"
         f"Karla: review this inbox drop. Classify as notify Rev, file to vault, "
         f"delegate to a sub-agent, or mark as routine. Content:\n\n"
         f"{excerpt or '(empty file)'}"
