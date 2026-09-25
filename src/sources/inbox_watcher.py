@@ -25,7 +25,7 @@ try:
     _GATE_MTIME = _INBOX_GATE.stat().st_mtime if _INBOX_GATE.is_file() else 0.0
 except OSError:
     _GATE_MTIME = 0.0
-_GATE_VERSION = "2026-09-25-j2"
+_GATE_VERSION = "2026-09-25-i20"
 
 
 def _content_fingerprint(path: Path) -> str:
