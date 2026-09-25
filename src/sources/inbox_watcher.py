@@ -21,11 +21,30 @@ from src.state import StateManager
 logger = logging.getLogger(__name__)
 
 _INBOX_GATE = Path.home() / ".hermes/contracts/inbox/inbox-contract-check.py"
-try:
-    _GATE_MTIME = _INBOX_GATE.stat().st_mtime if _INBOX_GATE.is_file() else 0.0
-except OSError:
-    _GATE_MTIME = 0.0
-_GATE_VERSION = "2026-09-25-i20"
+
+
+def _gate_meta() -> tuple[str, float]:
+    """I27: read version/mtime at check time — import-time constants go stale."""
+    version = "unknown"
+    mtime = 0.0
+    if not _INBOX_GATE.is_file():
+        return version, mtime
+    try:
+        mtime = _INBOX_GATE.stat().st_mtime
+    except OSError:
+        pass
+    try:
+        for line in _INBOX_GATE.read_text(encoding="utf-8").splitlines():
+            if not line.startswith("GATE_VERSION"):
+                continue
+            # GATE_VERSION = "2026-09-25-i20"  # optional comment
+            rhs = line.split("=", 1)[1].split("#", 1)[0].strip().strip("\"'")
+            if rhs:
+                version = rhs
+            break
+    except OSError:
+        pass
+    return version, mtime
 
 
 def _content_fingerprint(path: Path) -> str:
@@ -166,11 +185,12 @@ class InboxEventSource:
                 dest = qdir / path.name
                 try:
                     shutil.move(str(path), str(dest))
-                    # J4: version the verdict so staleness is detectable.
+                    # J4/I27: version the verdict from on-disk gate (not import-time).
+                    gate_version, gate_mtime = _gate_meta()
                     sidecar = dest.with_suffix(dest.suffix + ".gate.txt")
                     sidecar.write_text(
-                        f"gate_version={_GATE_VERSION}\n"
-                        f"gate_mtime={_GATE_MTIME}\n"
+                        f"gate_version={gate_version}\n"
+                        f"gate_mtime={gate_mtime}\n"
                         f"{gate_out}\n",
                         encoding="utf-8",
                     )
