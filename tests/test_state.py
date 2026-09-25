@@ -221,6 +221,23 @@ def test_nudge_budget_queued_and_inbox_not_counted(tmp_path: Path, monkeypatch: 
     assert state.nudge_count_window(3600) == 1
 
 
+def test_mark_file_processed_drains_to_archive(tmp_path: Path) -> None:
+    """Face I12: processed drops leave Inbox so they cannot be re-notified / overwritten."""
+    inbox = tmp_path / "Inbox"
+    inbox.mkdir()
+    name = "kanban-report-i12-drain-2026-09-25-face.md"
+    drop = inbox / name
+    drop.write_text("# ok\n\n<!-- inbox-complete -->\n", encoding="utf-8")
+    (inbox / f"{name}.sha256").write_text("deadbeef\n", encoding="utf-8")
+    state = StateManager(tmp_path / "state.yaml", inbox_dir=inbox)
+    state.mark_file_processed("inbox", name, "1:2")
+    assert not drop.exists()
+    archived = inbox / "_Archive" / name
+    assert archived.is_file()
+    assert (inbox / "_Archive" / f"{name}.sha256").is_file()
+    assert state.is_file_processed("inbox", name, "1:2") is True
+
+
 def test_inbox_inflight_expires(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     base = 4_000_000.0
     t = {"now": base}

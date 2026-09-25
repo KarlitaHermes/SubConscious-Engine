@@ -105,7 +105,10 @@ def test_resolve_rules_path_from_vault_root(tmp_path: Path) -> None:
 async def test_inbox_source_publishes_new_file(tmp_path: Path) -> None:
     inbox_dir = tmp_path / "inbox"
     inbox_dir.mkdir()
-    (inbox_dir / "email-test.md").write_text("Please review this email", encoding="utf-8")
+    name = "kanban-report-email-2026-09-25-face.md"
+    (inbox_dir / name).write_text(
+        "Please review this email\n\n<!-- inbox-complete -->\n", encoding="utf-8"
+    )
 
     state = StateManager(tmp_path / "state.yaml")
     entry_point = EntryPoint(
@@ -126,23 +129,24 @@ async def test_inbox_source_publishes_new_file(tmp_path: Path) -> None:
 
     assert len(events) == 1
     assert events[0].entry_point == "inbox"
-    assert events[0].event_type == "inbox_item"
+    assert events[0].event_type == "inbox_notify"
     assert events[0].metadata.get("file_fingerprint")
     # Processed only after delivery — publish alone must not mark (Bug A).
-    assert state.is_file_processed("inbox", "email-test.md") is False
+    assert state.is_file_processed("inbox", name) is False
 
 
 @pytest.mark.asyncio
 async def test_inbox_source_skips_already_processed(tmp_path: Path) -> None:
+    import hashlib
+
     inbox_dir = tmp_path / "inbox"
     inbox_dir.mkdir()
-    path = inbox_dir / "email-test.md"
-    path.write_text("again", encoding="utf-8")
-    st = path.stat()
-    fingerprint = f"{st.st_mtime_ns}:{st.st_size}"
+    path = inbox_dir / "kanban-report-email-2026-09-25-face.md"
+    path.write_text("again\n\n<!-- inbox-complete -->\n", encoding="utf-8")
+    fingerprint = f"sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}"
 
     state = StateManager(tmp_path / "state.yaml")
-    state.mark_file_processed("inbox", "email-test.md", fingerprint)
+    state.mark_file_processed("inbox", path.name, fingerprint)
     entry_point = EntryPoint(id="inbox", type="directory", path=inbox_dir)
     source = InboxEventSource(
         entry_point,
@@ -161,12 +165,13 @@ async def test_inbox_source_skips_already_processed(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_inbox_source_renotifies_on_rewrite(tmp_path: Path) -> None:
+    import hashlib
+
     inbox_dir = tmp_path / "inbox"
     inbox_dir.mkdir()
-    path = inbox_dir / "kanban-report-weather-test.md"
-    path.write_text("first", encoding="utf-8")
-    st = path.stat()
-    fingerprint = f"{st.st_mtime_ns}:{st.st_size}"
+    path = inbox_dir / "kanban-report-status-2026-09-25-face.md"
+    path.write_text("first\n\n<!-- inbox-complete -->\n", encoding="utf-8")
+    fingerprint = f"sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}"
 
     state = StateManager(tmp_path / "state.yaml")
     state.mark_file_processed("inbox", path.name, fingerprint)
@@ -178,7 +183,7 @@ async def test_inbox_source_renotifies_on_rewrite(tmp_path: Path) -> None:
     )
     source = InboxEventSource(entry_point, state, vault_root=tmp_path)
 
-    path.write_text("second — corrected", encoding="utf-8")
+    path.write_text("second — corrected\n\n<!-- inbox-complete -->\n", encoding="utf-8")
     bus = EventBus()
     await source._scan_inbox(bus)
     bus.close()

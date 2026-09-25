@@ -58,12 +58,13 @@ def build_maintenance_prompt(
             f"This is NOT a free pick. Do not run disk/hygiene/other maintenance.\n\n"
             f"Worker:\n"
             f"1. Ack in_progress ({_ACK}).\n"
-            f"2. If a live Karla Music board/monitor is already running: WRITE "
-            f"~/vault/COMMS/Inbox/kanban-report-music-YYYY-MM-DD-face.md with reason "
-            f"`already running`, then ack done.\n"
+            f"2. If a live Karla Music board/monitor is already running: drop "
+            f"`kanban-report-music-YYYY-MM-DD-face.md` via "
+            f"`~/.hermes/profiles/karla-worker/bin/write-inbox-report.sh` "
+            f"(reason `already running`), then ack done. Never raw cat / vault_write to Inbox.\n"
             f"3. Otherwise start `{_MUSIC_SCRIPT}` in background (terminal). "
             f"Script monitor owns success/block Inbox `-face` report.\n"
-            f"4. If start fails: WRITE Inbox `…-face.md` with the failure, ack done.\n"
+            f"4. If start fails: same writer → `…-face.md` with the failure, ack done.\n"
             f"5. Do not stop at a plan. Use tools before any summary.\n"
         )
 
@@ -80,8 +81,9 @@ def build_maintenance_prompt(
             f"2. Look up task_id=\"{scheduled}\" in SOUL / the task file and EXECUTE it "
             f"now with tools (script, terminal, vault_write). Do not stop at a plan.\n"
             f"3. Do NOT substitute a different maintenance item.\n"
-            f"4. On skip/failure: WRITE ~/vault/COMMS/Inbox/kanban-report-…-face.md "
-            f"with the reason, then ack done.\n"
+            f"4. On skip/failure: pipe body to "
+            f"`~/.hermes/profiles/karla-worker/bin/write-inbox-report.sh` "
+            f"`kanban-report-…-face.md` (never raw cat / vault_write to Inbox), then ack done.\n"
             f"5. On success (or successful board start): ack done.\n"
         )
 
@@ -95,9 +97,12 @@ def build_maintenance_prompt(
         f"2. Read the task file with tools. Pick ONE task that is DUE "
         f"(Last done / cooldown elapsed).\n"
         f"3. EXECUTE that task with tools now (script, terminal, vault_write). "
-        f"Update Last done and WRITE a report under {report_dir} "
-        f"(and Inbox …-face.md when Face must know).\n"
-        f"4. If nothing is due: WRITE a short 'All tasks up to date' report, ack done.\n"
+        f"Update Last done and WRITE a report under {report_dir}. "
+        f"If Face must know: "
+        f"`printf '…' | ~/.hermes/profiles/karla-worker/bin/write-inbox-report.sh …-face.md` "
+        f"(never raw cat / vault_write into COMMS/Inbox).\n"
+        f"4. If nothing is due: WRITE a short 'All tasks up to date' report under "
+        f"{report_dir}, ack done.\n"
         f"5. Do not stop at a plan or JSON. Tools first, then a one-line summary.\n"
     )
 
@@ -125,8 +130,10 @@ def build_research_prompt(
         f"2. Check {report_dir} for research in the last 48h; skip duplicates.\n"
         f"3. Pick ONE new topic from the research tasks or DREAM journal; research it "
         f"with tools; WRITE findings under {report_dir}.\n"
-        f"4. If Face/Rev must know: WRITE ~/vault/COMMS/Inbox/research-digest-YYYY-MM-DD-HH-face.md "
-        f"(include hour 00–23 so a second digest that day does not overwrite the first).\n"
+        f"4. If Face/Rev must know: pipe to "
+        f"`~/.hermes/profiles/karla-worker/bin/write-inbox-report.sh` "
+        f"`research-digest-YYYY-MM-DD-HH-face.md` "
+        f"(hour 00–23; never raw cat / vault_write to Inbox).\n"
         f"5. Ack done. Do not stop at a plan or JSON — tools first.\n"
     )
 
