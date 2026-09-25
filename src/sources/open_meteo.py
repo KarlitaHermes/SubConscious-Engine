@@ -182,7 +182,7 @@ def _parse_hourly_window(
         f"Hourly (convenience table):\n" + "\n".join(lines) + "\n\n"
         f"Worker: TRANSPORT ONLY — copy the weather-json block verbatim into "
         f"~/vault/COMMS/Inbox/{drop_name} via write-inbox-report.sh. "
-        f"Do NOT summarise. Do NOT add a verdict or advice field. "
+        f"Do NOT summarise. Do NOT add Ride/outdoors/advice fields. "
         f"Face owns judgment. SE will inbox_notify Face. Ack when the file exists.\n"
         f"Source: Open-Meteo (https://open-meteo.com/)"
     )
@@ -245,7 +245,7 @@ def _parse_daily_summary(
         f"  Conditions: {conditions}\n\n"
         f"Worker: TRANSPORT ONLY — write the numbers above into "
         f"~/vault/COMMS/Inbox/kanban-report-weather-{date}-face.md via write-inbox-report.sh. "
-        f"No verdict. SE will inbox_notify Face. Ack when the file exists.\n"
+        f"No Ride/advice. SE will inbox_notify Face. Ack when the file exists.\n"
         f"Source: Open-Meteo (https://open-meteo.com/)"
     )
 

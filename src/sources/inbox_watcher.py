@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from src.checks.inbox import build_inbox_prompt, classify_inbox_file
+from src.checks.inbox import build_inbox_prompt, classify_inbox_file, drain_quarantine_file
 from src.config.models import EntryPoint
 from src.events.bus import EventBus
 from src.events.models import Event, EventSourceKind
@@ -21,6 +21,11 @@ from src.state import StateManager
 logger = logging.getLogger(__name__)
 
 _INBOX_GATE = Path.home() / ".hermes/contracts/inbox/inbox-contract-check.py"
+try:
+    _GATE_MTIME = _INBOX_GATE.stat().st_mtime if _INBOX_GATE.is_file() else 0.0
+except OSError:
+    _GATE_MTIME = 0.0
+_GATE_VERSION = "2026-09-25-j2"
 
 
 def _content_fingerprint(path: Path) -> str:
@@ -95,7 +100,50 @@ class InboxEventSource:
                 logger.exception("Inbox source scan error")
             await asyncio.sleep(self._poll_interval)
 
+    async def _recheck_quarantine(self) -> None:
+        """J4/I18: re-run gate on quarantined drops; restore if they now pass."""
+        qdir = self._directory / "_Quarantine"
+        if not qdir.is_dir():
+            return
+        candidates = list(qdir.glob("*.md"))
+        arch = qdir / "_Archive"
+        if arch.is_dir():
+            candidates.extend(arch.glob("*.md"))
+        for path in candidates:
+            if not path.is_file():
+                continue
+            ok, _gate_out = _run_inbox_gate(path)
+            if not ok:
+                continue
+            dest = self._directory / path.name
+            if dest.exists():
+                logger.info(
+                    "Quarantine recheck OK for %s but Inbox already has that name — leaving",
+                    path.name,
+                )
+                continue
+            try:
+                shutil.move(str(path), str(dest))
+                for side in (
+                    path.parent / f"{path.name}.gate.txt",
+                    path.parent / f"{path.name}.sha256",
+                ):
+                    if side.is_file():
+                        side.unlink(missing_ok=True)
+            except OSError:
+                logger.exception("Failed to un-quarantine %s", path.name)
+                continue
+            processed = self._state._data.setdefault("processed_files", {})
+            entry = processed.setdefault(self._entry_point.id, {})
+            entry.pop(path.name, None)
+            self._state.save()
+            logger.warning(
+                "Un-quarantined %s — current gate passes (stale verdict cleared)",
+                path.name,
+            )
+
     async def _scan_inbox(self, bus: EventBus) -> None:
+        await self._recheck_quarantine()
         for path in sorted(self._directory.glob("*.md")):
             if not path.is_file():
                 continue
@@ -118,8 +166,13 @@ class InboxEventSource:
                 dest = qdir / path.name
                 try:
                     shutil.move(str(path), str(dest))
-                    (dest.with_suffix(dest.suffix + ".gate.txt")).write_text(
-                        gate_out + "\n", encoding="utf-8"
+                    # J4: version the verdict so staleness is detectable.
+                    sidecar = dest.with_suffix(dest.suffix + ".gate.txt")
+                    sidecar.write_text(
+                        f"gate_version={_GATE_VERSION}\n"
+                        f"gate_mtime={_GATE_MTIME}\n"
+                        f"{gate_out}\n",
+                        encoding="utf-8",
                     )
                 except OSError:
                     logger.exception("Failed to quarantine %s", path.name)
@@ -132,6 +185,8 @@ class InboxEventSource:
                 self._state.mark_file_processed(
                     self._entry_point.id, path.name, fingerprint
                 )
+                # I18: drain to _Quarantine/_Archive (preserve gate reason).
+                drain_quarantine_file(self._directory, path.name)
                 continue
 
             classification = classify_inbox_file(

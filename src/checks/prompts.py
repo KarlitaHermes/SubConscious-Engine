@@ -103,7 +103,7 @@ def build_maintenance_prompt(
         f"(never raw cat / vault_write into COMMS/Inbox).\n"
         f"4. If nothing is due: WRITE a short 'All tasks up to date' report under "
         f"{report_dir}, ack done. **I10:** before any weather success/verbatim claim, run "
-        f"`python3 ~/.hermes/contracts/inbox/audit-weather-drops.py --hours 48 --also-archive` "
+        f"`python3 ~/.hermes/contracts/inbox/audit-weather-drops.py --hours 48` "
         f"and paste only its `CLAIM:` line — never invent counts.\n"
         f"5. Do not stop at a plan or JSON. Tools first, then a one-line summary.\n"
     )

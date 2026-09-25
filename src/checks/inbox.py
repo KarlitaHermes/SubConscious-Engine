@@ -142,6 +142,43 @@ def drain_inbox_file(inbox_dir: Path, filename: str) -> Path | None:
     return dest
 
 
+def drain_quarantine_file(inbox_dir: Path, filename: str) -> Path | None:
+    """I18: move a rejected drop from Inbox/_Quarantine → _Quarantine/_Archive.
+
+    Preserves ``.md.gate.txt`` and ``.sha256`` sidecars. Returns archive path.
+    """
+    import shutil
+    import time
+
+    qdir = inbox_dir / "_Quarantine"
+    src = qdir / filename
+    if not src.is_file():
+        return None
+    archive = qdir / "_Archive"
+    try:
+        archive.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logger.warning("Quarantine archive mkdir failed: %s", exc)
+        return None
+    dest = archive / filename
+    if dest.exists():
+        dest = archive / f"{src.stem}.{int(time.time())}{src.suffix}"
+    try:
+        shutil.move(str(src), str(dest))
+    except OSError as exc:
+        logger.warning("Quarantine drain failed for %s: %s", filename, exc)
+        return None
+    for side_name in (f"{filename}.gate.txt", f"{filename}.sha256"):
+        side = qdir / side_name
+        if side.is_file():
+            try:
+                shutil.move(str(side), str(archive / side.name))
+            except OSError as exc:
+                logger.warning("Quarantine drain sidecar failed for %s: %s", side.name, exc)
+    logger.info("Quarantine drained %s → %s", filename, dest)
+    return dest
+
+
 def classify_inbox_file(path: Path, *, default_event_type: str = "inbox_item") -> InboxClassification | None:
     """Classify an inbox markdown file. Returns None for standing/skipped files."""
     filename = path.name
