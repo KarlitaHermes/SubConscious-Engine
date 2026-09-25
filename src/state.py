@@ -244,6 +244,14 @@ class StateManager:
         entry_files[filename] = fingerprint if fingerprint is not None else time.time()
         self.clear_inbox_inflight(entry_point_id, filename)
         self.save()
+        # Face I12 / B1: drain so the drop is not left as pending / re-writable.
+        if self._inbox_dir is not None and filename.endswith(".md"):
+            try:
+                from src.checks.inbox import drain_inbox_file
+
+                drain_inbox_file(Path(self._inbox_dir), filename)
+            except Exception:
+                logger.exception("Inbox drain failed for %s", filename)
 
     # Inbox queue flush: queued inject not yet surfaced — don't republish until timeout.
     INBOX_INFLIGHT_TIMEOUT_SEC = 900  # 15 minutes

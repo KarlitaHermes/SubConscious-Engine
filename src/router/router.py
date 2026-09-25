@@ -368,6 +368,7 @@ class Router:
 
     def _write_inbox_report(self, event: Event) -> None:
         """Drop a notify-prefixed Inbox file so Face is paged via inbox_notify."""
+        import subprocess
         from pathlib import Path
 
         inbox = None
@@ -387,7 +388,7 @@ class Router:
         window = (event.metadata or {}).get("window_start") or (event.metadata or {}).get("date") or ""
         stamp = str(window)[:13].replace("T", "-") if window else event.id[:12]
         kind = event.event_type or "report"
-        path = inbox / f"kanban-report-{kind}-{stamp}-face.md"
+        name = f"kanban-report-{kind}-{stamp}-face.md"
         # Strip Worker-only instructions; Face only needs the outlook body.
         body_lines = []
         for line in event.text.splitlines():
@@ -395,13 +396,35 @@ class Router:
                 break
             body_lines.append(line)
         body = "\n".join(body_lines).strip() or event.text.strip()
+        payload = (
+            f"# {kind} report\n\n{body}\n\n"
+            f"_SE inbox_report after Worker nudge (event {event.id})._\n"
+        )
+        writer = Path.home() / ".hermes/profiles/karla-worker/bin/write-inbox-report.sh"
         try:
-            path.write_text(
-                f"# {kind} report\n\n{body}\n\n"
-                f"_SE inbox_report after Worker nudge (event {event.id})._\n",
-                encoding="utf-8",
-            )
-            logger.info("Inbox report written: %s", path)
+            if writer.is_file():
+                import os
+
+                env = os.environ.copy()
+                env["INBOX"] = str(inbox)
+                r = subprocess.run(
+                    [str(writer), name],
+                    input=payload,
+                    text=True,
+                    capture_output=True,
+                    env=env,
+                )
+                if r.returncode != 0:
+                    logger.warning(
+                        "Inbox report writer failed: %s",
+                        (r.stderr or r.stdout or "").strip(),
+                    )
+                    return
+                logger.info("Inbox report written via gate: %s/%s", inbox, name)
+            else:
+                path = inbox / name
+                path.write_text(payload + "\n<!-- inbox-complete -->\n", encoding="utf-8")
+                logger.info("Inbox report written: %s", path)
         except OSError as exc:
             logger.warning("Inbox report write failed: %s", exc)
 

@@ -106,6 +106,42 @@ def vault_dest_relative(filename: str) -> str:
     return DEFAULT_VAULT_DEST
 
 
+def drain_inbox_file(inbox_dir: Path, filename: str) -> Path | None:
+    """Move a processed Inbox drop into Inbox/_Archive (Face I12 / B1).
+
+    Returns the archive path, or None if the source was already gone.
+    Also moves a matching ``.sha256`` sidecar when present.
+    """
+    import shutil
+    import time
+
+    src = inbox_dir / filename
+    if not src.is_file():
+        return None
+    archive = inbox_dir / "_Archive"
+    try:
+        archive.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logger.warning("Inbox archive mkdir failed: %s", exc)
+        return None
+    dest = archive / filename
+    if dest.exists():
+        dest = archive / f"{src.stem}.{int(time.time())}{src.suffix}"
+    try:
+        shutil.move(str(src), str(dest))
+    except OSError as exc:
+        logger.warning("Inbox drain failed for %s: %s", filename, exc)
+        return None
+    side = inbox_dir / f"{filename}.sha256"
+    if side.is_file():
+        try:
+            shutil.move(str(side), str(archive / side.name))
+        except OSError as exc:
+            logger.warning("Inbox drain sidecar failed for %s: %s", side.name, exc)
+    logger.info("Inbox drained %s → %s", filename, dest)
+    return dest
+
+
 def classify_inbox_file(path: Path, *, default_event_type: str = "inbox_item") -> InboxClassification | None:
     """Classify an inbox markdown file. Returns None for standing/skipped files."""
     filename = path.name
