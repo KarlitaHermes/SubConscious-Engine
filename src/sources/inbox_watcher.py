@@ -120,7 +120,11 @@ class InboxEventSource:
             await asyncio.sleep(self._poll_interval)
 
     async def _recheck_quarantine(self) -> None:
-        """J4/I18: re-run gate on quarantined drops; restore if they now pass."""
+        """J4/I18: re-run gate on quarantined drops; restore if they now pass.
+
+        R1: do not restore bytes already delivered/acked (content hash) — that
+        was the 10:31 un-quarantine re-fire loop.
+        """
         qdir = self._directory / "_Quarantine"
         if not qdir.is_dir():
             return
@@ -130,6 +134,16 @@ class InboxEventSource:
             candidates.extend(arch.glob("*.md"))
         for path in candidates:
             if not path.is_file():
+                continue
+            try:
+                fingerprint = _content_fingerprint(path)
+            except OSError:
+                continue
+            if self._state.is_content_processed(fingerprint):
+                logger.info(
+                    "Quarantine recheck skip %s — content already delivered",
+                    path.name,
+                )
                 continue
             ok, _gate_out = _run_inbox_gate(path)
             if not ok:
@@ -152,6 +166,7 @@ class InboxEventSource:
             except OSError:
                 logger.exception("Failed to un-quarantine %s", path.name)
                 continue
+            # Allow one notify of newly-valid content; do not wipe content hashes.
             processed = self._state._data.setdefault("processed_files", {})
             entry = processed.setdefault(self._entry_point.id, {})
             entry.pop(path.name, None)
@@ -160,6 +175,16 @@ class InboxEventSource:
                 "Un-quarantined %s — current gate passes (stale verdict cleared)",
                 path.name,
             )
+
+    def _archived_same_content(self, path: Path, fingerprint: str) -> bool:
+        """R1: live Inbox copy matches _Archive → already handled, suppress."""
+        arch = self._directory / "_Archive" / path.name
+        if not arch.is_file():
+            return False
+        try:
+            return _content_fingerprint(arch) == fingerprint
+        except OSError:
+            return False
 
     async def _scan_inbox(self, bus: EventBus) -> None:
         await self._recheck_quarantine()
@@ -171,6 +196,15 @@ class InboxEventSource:
             except OSError:
                 continue
             if self._state.is_file_processed(self._entry_point.id, path.name, fingerprint):
+                continue
+            if self._archived_same_content(path, fingerprint):
+                logger.info(
+                    "Inbox skip %s — identical bytes already in _Archive",
+                    path.name,
+                )
+                self._state.mark_file_processed(
+                    self._entry_point.id, path.name, fingerprint
+                )
                 continue
             if self._state.is_inbox_inflight(
                 self._entry_point.id, path.name, fingerprint
@@ -203,7 +237,7 @@ class InboxEventSource:
                     gate_out.splitlines()[0] if gate_out else "",
                 )
                 self._state.mark_file_processed(
-                    self._entry_point.id, path.name, fingerprint
+                    self._entry_point.id, path.name, fingerprint, delivered=False
                 )
                 # I18: drain to _Quarantine/_Archive (preserve gate reason).
                 drain_quarantine_file(self._directory, path.name)

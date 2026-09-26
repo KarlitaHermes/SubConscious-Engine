@@ -213,11 +213,13 @@ class StateManager:
     ) -> bool:
         """Return True if this file+fingerprint was already emitted.
 
-        Fingerprint is typically ``f\"{mtime_ns}:{size}\"``. Legacy state stored
+        Fingerprint is typically ``sha256:…``. Legacy state stored
         a float timestamp — those entries are adopted to the current fingerprint
         once (no backlog re-notify). A later rewrite with a new fingerprint
         re-notifies.
         """
+        if fingerprint and self.is_content_processed(fingerprint):
+            return True
         processed = self._data.setdefault("processed_files", {})
         entry = processed.setdefault(entry_point_id, {})
         if filename not in entry:
@@ -232,20 +234,47 @@ class StateManager:
         self.save()
         return True
 
+    def is_content_processed(self, fingerprint: str) -> bool:
+        """R1: True if these exact bytes were already delivered/acked (any filename)."""
+        if not fingerprint:
+            return False
+        hashes = self._data.get("processed_content_hashes") or {}
+        return fingerprint in hashes
+
     def mark_file_processed(
         self,
         entry_point_id: str,
         filename: str,
         fingerprint: str | None = None,
+        *,
+        delivered: bool = True,
     ) -> None:
-        """Record that a directory file has been successfully delivered (or acked)."""
+        """Record that a directory file has been handled.
+
+        ``delivered=True`` (default): successful surface/ack — also records the
+        content hash so the same bytes cannot re-fire under another filename or
+        after un-quarantine (Face R1).
+        ``delivered=False``: quarantine / suppress only — filename skipped until
+        fingerprint changes, but content may still be notified if restored with
+        a fixed gate.
+        """
         processed = self._data.setdefault("processed_files", {})
         entry_files = processed.setdefault(entry_point_id, {})
         entry_files[filename] = fingerprint if fingerprint is not None else time.time()
+        if delivered and fingerprint:
+            hashes = self._data.setdefault("processed_content_hashes", {})
+            hashes[fingerprint] = {"file": filename, "at": time.time()}
+            # ponytail: bound growth; fingerprints are unique per drop body
+            if len(hashes) > 500:
+                oldest = sorted(hashes.items(), key=lambda kv: float(kv[1].get("at") or 0))[
+                    : len(hashes) - 500
+                ]
+                for key, _ in oldest:
+                    hashes.pop(key, None)
         self.clear_inbox_inflight(entry_point_id, filename)
         self.save()
         # Face I12 / B1: drain so the drop is not left as pending / re-writable.
-        if self._inbox_dir is not None and filename.endswith(".md"):
+        if delivered and self._inbox_dir is not None and filename.endswith(".md"):
             try:
                 from src.checks.inbox import drain_inbox_file
 
